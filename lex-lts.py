@@ -40,7 +40,7 @@ UNBIKEABLE_RDCLASS = [1, 2, 3, 4]  # Road classes that are unbikeable without in
 RESIDENTIAL_MAX_SPEED = 35  # Maximum speed limit for residential streets to include
 
 # AADT settings
-AADT_PATH = None  # Path to AADT data if available
+AADT_PATH = Path("StaList_Fayette (1).csv")
 AADT_MAX_DIST_M = 50
 
 # Facility type detection (same as original script)
@@ -75,7 +75,6 @@ def normalize_fac(val: str) -> str:
 def compute_lts(row):
     """
     Compute LTS for bike infrastructure based on facility type, speed, and AADT
-    (Same logic as original bikestress_route.py)
     """
     fac = row.get("__fac_cat", "unknown")
     speed = row.get("speed_mph", np.nan)
@@ -183,6 +182,25 @@ streets = read_dataframe(LEX_STREET_DATA_PATH)
 streets = ensure_4326(streets)
 print(f"  Loaded {len(streets)} street segments")
 
+# Load AADT data and join to streets via KYDOT station ID
+if AADT_PATH and AADT_PATH.exists():
+    print(f"\nLoading AADT data from {AADT_PATH}...")
+    aadt_df = pd.read_csv(AADT_PATH)
+    aadt_df['AADT'] = pd.to_numeric(aadt_df['AADT'], errors='coerce')
+    aadt_df = aadt_df.dropna(subset=['AADT'])
+    # Build KYDOT key from Sta ID (strip county prefix, e.g. '034D85' -> 'D85')
+    aadt_df['__kydot_key'] = aadt_df['Sta ID'].astype(str).str.strip().str.replace(r'^034', '', regex=True)
+    # Median AADT per station (some stations appear on multiple route segments)
+    aadt_by_kydot = aadt_df.groupby('__kydot_key')['AADT'].median()
+    # Join onto streets
+    streets['aadt'] = streets['KYDOT'].map(aadt_by_kydot)
+    aadt_matched = streets['aadt'].notna().sum()
+    print(f"  Loaded {len(aadt_df)} AADT records")
+    print(f"  Matched AADT to {aadt_matched} / {len(streets)} street segments via KYDOT")
+else:
+    streets['aadt'] = np.nan
+    print(f"\n  No AADT data available (set AADT_PATH to enable)")
+
 print("\n" + "="*60)
 print("STEP 2: COMPUTE LTS FOR BIKE INFRASTRUCTURE")
 print("="*60)
@@ -204,6 +222,7 @@ bike_infra["__centerline"] = bike_infra[centerline_col].astype(str).str.lower().
 # Match bike segments to street speeds
 print(f"\n  Matching bike infrastructure to street speeds...")
 bike_infra['speed_mph'] = np.nan
+bike_infra['aadt'] = np.nan
 bike_infra['__matched_street'] = False
 
 # Normalize road names for matching
@@ -232,17 +251,20 @@ for idx in bike_infra.index:
                 bike_infra.loc[idx, 'speed_mph'] = median_speed
                 bike_infra.loc[idx, '__matched_street'] = True
                 name_matches += 1
+            median_aadt = matching_streets['aadt'].median()
+            if not pd.isna(median_aadt):
+                bike_infra.loc[idx, 'aadt'] = median_aadt
 
 print(f"    Matched {name_matches} segments by road name")
 
-# Fallback: Spatial matching for remaining (with improved algorithm)
+# Fallback: Spatial matching for remaining 
 unmatched_idx = bike_infra[~bike_infra['__matched_street']].index
 if len(unmatched_idx) > 0:
     print(f"    Spatial matching for {len(unmatched_idx)} remaining segments...")
     bike_unmatched_m = project_to_local(bike_infra.loc[unmatched_idx])
 
     # Include RDCLASS for filtering and geometry for directional validation
-    streets_for_match = streets[['geometry', 'speed_mph', 'RDCLASS']].copy()
+    streets_for_match = streets[['geometry', 'speed_mph', 'RDCLASS', 'aadt']].copy()
     streets_m = project_to_local(streets_for_match)
 
     # Prefer main roads (RDCLASS 3-4) over collectors/local streets (RDCLASS 5-8)
@@ -275,9 +297,10 @@ if len(unmatched_idx) > 0:
         Find the best matching street segment considering:
         1. Distance (must be within max_dist)
         2. Direction (must be roughly parallel - within angle_tolerance degrees)
+        Returns (speed_mph, aadt, distance) or (None, None, None)
         """
         if street_candidates.empty:
-            return None, None
+            return None, None, None
 
         bike_geom = bike_row.geometry
         bike_bearing = bike_row['__bearing']
@@ -286,7 +309,7 @@ if len(unmatched_idx) > 0:
         nearby = street_candidates[street_candidates.geometry.distance(bike_geom) <= max_dist].copy()
 
         if nearby.empty:
-            return None, None
+            return None, None, None
 
         # Calculate distance and bearing for each candidate
         nearby['__dist'] = nearby.geometry.distance(bike_geom)
@@ -305,14 +328,15 @@ if len(unmatched_idx) > 0:
             nearby = nearby[nearby['__bearing_diff'] <= angle_tolerance]
 
         if nearby.empty:
-            return None, None
+            return None, None, None
 
         # Return the closest parallel street
         best_match = nearby.loc[nearby['__dist'].idxmin()]
-        return best_match['speed_mph'], best_match['__dist']
+        return best_match['speed_mph'], best_match.get('aadt', np.nan), best_match['__dist']
 
     # First try to match against main roads (RDCLASS 3-4) with tight tolerance
     matched_speeds = {}
+    matched_aadts = {}
     matched_count_main = 0
     matched_count_collector = 0
 
@@ -320,23 +344,29 @@ if len(unmatched_idx) > 0:
         bike_row = bike_unmatched_m.loc[idx]
 
         # Try main roads first (tighter distance tolerance)
-        speed, dist = find_best_street_match(bike_row, main_roads_m, max_dist=15, angle_tolerance=30)
+        speed, aadt_val, dist = find_best_street_match(bike_row, main_roads_m, max_dist=5, angle_tolerance=30)
 
         if speed is not None and not pd.isna(speed):
             matched_speeds[idx] = speed
+            if aadt_val is not None and not pd.isna(aadt_val):
+                matched_aadts[idx] = aadt_val
             matched_count_main += 1
             continue
 
         # Fall back to collector roads (slightly looser tolerance)
-        speed, dist = find_best_street_match(bike_row, collector_roads_m, max_dist=12, angle_tolerance=25)
+        speed, aadt_val, dist = find_best_street_match(bike_row, collector_roads_m, max_dist=20, angle_tolerance=25)
 
         if speed is not None and not pd.isna(speed):
             matched_speeds[idx] = speed
+            if aadt_val is not None and not pd.isna(aadt_val):
+                matched_aadts[idx] = aadt_val
             matched_count_collector += 1
 
-    # Apply matched speeds
+    # Apply matched speeds and AADT
     for idx, speed in matched_speeds.items():
         bike_infra.loc[idx, 'speed_mph'] = speed
+    for idx, aadt_val in matched_aadts.items():
+        bike_infra.loc[idx, 'aadt'] = aadt_val
 
     print(f"    Matched {matched_count_main} segments to main roads (RDCLASS 3-4)")
     print(f"    Matched {matched_count_collector} segments to collector roads (RDCLASS 5-8)")
@@ -344,9 +374,6 @@ if len(unmatched_idx) > 0:
 
 # Round speeds
 bike_infra["speed_mph"] = bike_infra["speed_mph"].apply(round_to_common_mph)
-
-# Initialize AADT column (not using it yet, but needed for LTS function)
-bike_infra['aadt'] = np.nan
 
 # Compute LTS for bike infrastructure
 print(f"\n  Computing LTS for bike infrastructure...")
@@ -360,6 +387,7 @@ for lts in sorted(bike_infra['LTS'].unique()):
     print(f"    LTS {lts}: {count:,} segments ({pct:.1f}%)")
 
 print(f"\n  Speed coverage: {bike_infra['speed_mph'].notna().sum()} / {len(bike_infra)} segments")
+print(f"  AADT coverage: {bike_infra['aadt'].notna().sum()} / {len(bike_infra)} segments")
 
 print("\n" + "="*60)
 print("STEP 3: CLASSIFY ALL STREETS BY ROAD TYPE")
@@ -386,7 +414,7 @@ print(f"    Bikeable after speed filter (≤{RESIDENTIAL_MAX_SPEED} mph): {len(b
 
 # Compute LTS for bikeable streets
 bikeable_filtered['LTS'] = bikeable_filtered.apply(
-    lambda row: compute_residential_lts(row['speed_mph'], row['RDCLASS']),
+    lambda row: compute_residential_lts(row['speed_mph'], row['RDCLASS'], row.get('aadt', None)),
     axis=1
 )
 
@@ -409,25 +437,34 @@ for lts in sorted(bikeable_network['LTS'].unique()):
     print(f"    LTS {lts}: {count:,} segments ({pct:.1f}%)")
 
 # Handle unbikeable streets (LTS 5)
-# Filter out segments that have bike infrastructure on them
-print(f"\n  Filtering unbikeable streets to exclude those with bike infrastructure...")
+# Filter out segments that have PARALLEL bike infrastructure running along them
+# (not cross streets that merely intersect at a point)
+print(f"\n  Filtering unbikeable streets to exclude those with parallel bike infrastructure...")
 print(f"    Initial unbikeable streets: {len(unbikeable_streets):,}")
 
-# Create spatial index to identify which unbikeable streets have bike infrastructure
 unbikeable_m = project_to_local(unbikeable_streets)
 bike_infra_m = project_to_local(bike_infra)
 
-# Buffer bike infrastructure by 20m to catch overlapping streets
-bike_buffer = bike_infra_m.geometry.buffer(20)
-bike_buffer_union = bike_buffer.union_all()
+def has_parallel_bike_infra(street_geom, bike_gdf, buffer_dist=20, overlap_ratio=0.5):
+    """Check if bike infrastructure runs parallel along a street (not just crosses it).
+    Requires that the bike infra overlaps at least overlap_ratio of the street length."""
+    nearby = bike_gdf[bike_gdf.geometry.distance(street_geom) <= buffer_dist]
+    if nearby.empty:
+        return False
+    # Measure how much of the street is covered by nearby bike infra buffers
+    bike_corridor = nearby.geometry.buffer(buffer_dist).union_all()
+    covered = street_geom.intersection(bike_corridor)
+    return covered.length >= street_geom.length * overlap_ratio
 
-# Mark unbikeable streets that intersect with bike infrastructure
-unbikeable_m['__has_bike_infra'] = unbikeable_m.geometry.intersects(bike_buffer_union)
+print(f"    Checking for parallel bike infrastructure (this may take a moment)...")
+unbikeable_m['__has_bike_infra'] = unbikeable_m.geometry.apply(
+    lambda g: has_parallel_bike_infra(g, bike_infra_m)
+)
 
-# Filter to only unbikeable streets WITHOUT bike infrastructure
+# Filter to only unbikeable streets WITHOUT parallel bike infrastructure
 unbikeable_filtered = unbikeable_streets[~unbikeable_m['__has_bike_infra']].copy()
 
-print(f"    Filtered out {len(unbikeable_streets) - len(unbikeable_filtered):,} segments with bike infrastructure")
+print(f"    Filtered out {len(unbikeable_streets) - len(unbikeable_filtered):,} segments with parallel bike infrastructure")
 print(f"    Remaining unbikeable streets: {len(unbikeable_filtered):,}")
 
 unbikeable_network = unbikeable_filtered.copy()
@@ -533,10 +570,13 @@ LTS_NAMES = {
     5: "Unbikeable (Major roads without infrastructure)"
 }
 
-# Add layers by LTS level
+# Add layers by LTS level (bike infrastructure + unbikeable only)
 print("  Adding map layers...")
 for lts_level in [1, 2, 3, 4, 5]:
-    subset = combined_simplified[combined_simplified['LTS'] == lts_level]
+    subset = combined_simplified[
+        (combined_simplified['LTS'] == lts_level) &
+        (combined_simplified['source'] != 'bikeable_streets')
+    ]
 
     if not subset.empty:
         # Prepare tooltip fields
@@ -555,6 +595,10 @@ for lts_level in [1, 2, 3, 4, 5]:
             tooltip_fields.append('speed_mph')
             tooltip_aliases.append('Speed (mph)')
 
+        if 'aadt' in subset.columns:
+            tooltip_fields.append('aadt')
+            tooltip_aliases.append('AADT')
+
         tooltip_fields.append('source')
         tooltip_aliases.append('Source')
 
@@ -563,7 +607,7 @@ for lts_level in [1, 2, 3, 4, 5]:
             name=LTS_NAMES[lts_level],
             style_function=lambda feature, lts=lts_level: {
                 "color": LTS_COLORS[lts],
-                "weight": 4,
+                "weight": 2,
                 "opacity": 0.8,
                 "lineJoin": "round",
                 "lineCap": "round"
@@ -579,6 +623,47 @@ for lts_level in [1, 2, 3, 4, 5]:
             show=True,
             smooth_factor=1.0
         ).add_to(m)
+
+# Add residential streets as a separate togglable layer
+residential = combined_simplified[combined_simplified['source'] == 'bikeable_streets']
+if not residential.empty:
+    print(f"  Adding residential streets layer ({len(residential)} segments)...")
+    res_tooltip_fields = ['LTS']
+    res_tooltip_aliases = ['LTS Level']
+    if 'Type_Facility' in residential.columns:
+        res_tooltip_fields.append('Type_Facility')
+        res_tooltip_aliases.append('Type')
+    if 'Name_Network' in residential.columns:
+        res_tooltip_fields.append('Name_Network')
+        res_tooltip_aliases.append('Street')
+    if 'speed_mph' in residential.columns:
+        res_tooltip_fields.append('speed_mph')
+        res_tooltip_aliases.append('Speed (mph)')
+    if 'aadt' in residential.columns:
+        res_tooltip_fields.append('aadt')
+        res_tooltip_aliases.append('AADT')
+
+    folium.GeoJson(
+        residential.to_json(),
+        name="Residential Streets (toggle off for bike network only)",
+        style_function=lambda feature: {
+            "color": LTS_COLORS.get(feature['properties']['LTS'], '#9CA3AF'),
+            "weight": 2,
+            "opacity": 0.5,
+            "lineJoin": "round",
+            "lineCap": "round"
+        },
+        tooltip=folium.GeoJsonTooltip(
+            fields=res_tooltip_fields,
+            aliases=res_tooltip_aliases,
+            localize=True,
+            sticky=False
+        ),
+        highlight_function=lambda x: {"weight": 6, "opacity": 1.0},
+        overlay=True,
+        show=True,
+        smooth_factor=1.0
+    ).add_to(m)
 
 # Add legend 
 lts_legend_html = """
@@ -644,6 +729,9 @@ Shows all streets in Lexington classified by bikeability.
 </div>
 """
 m.get_root().html.add_child(folium.Element(lts_legend_html))
+
+# Add layer control for toggling layers
+folium.LayerControl(collapsed=False).add_to(m)
 
 # Fit map to bounds
 if not combined_simplified.empty:
