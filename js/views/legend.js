@@ -89,6 +89,7 @@ export function render(stats, state) {
       <button class="btn" data-nav="browse">Browse streets as a list</button>
       <button class="btn" data-nav="share">Share</button>
       <button class="btn" data-nav="style">Map style</button>
+      <button class="btn" data-nav="methodology">What do these ratings mean?</button>
     </nav>
     <p class="tech">
       Tap any street for its rating and the data behind it.
