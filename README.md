@@ -150,6 +150,40 @@ Written to `data/` (gitignored — regenerate with `make build`):
 | `islands.json` | 5 KB | connected low-stress components |
 | `stats.json`, `methodology.json`, `manifest.json`, `planned.geojson` | < 4 KB | |
 
+## Using it without a mouse
+
+Map features are drawn on a GPU canvas: they are not DOM nodes, cannot take
+focus, and cannot be reached by a screen reader. Rather than scattering ARIA
+over a canvas and calling it done, the map offers a **parallel non-map path**
+that does everything the map does.
+
+- **Browse streets as a list** — the first focusable control on the page is a
+  skip link that opens it. Type a street name, arrow down into the results,
+  press enter. Selecting there does exactly what clicking the map does.
+- **Escape** returns to the overview from any view; the panel's back button and
+  the browser back button are the same gesture.
+- Every map action is announced through a live region.
+- LTS is encoded by **dash pattern and line width as well as colour**, so the
+  ratings stay distinguishable without colour vision. The legend swatches draw
+  the same patterns the map does.
+- **Map style → None** removes the basemap entirely, which is the strongest
+  contrast available: the ratings have to stay distinguishable from each other
+  as well as from the background.
+- Pinch-zoom works. The previous version set `user-scalable=no` on a map.
+
+## Sharing
+
+A bare link is not much use for advocacy, so every share composes the
+**statistic alongside the URL** — a pasted link carries its own argument:
+
+> Lexington has 922.1 miles of streets comfortable for an ordinary adult to bike
+> on — but they are split into 986 disconnected islands, and the largest holds
+> only 12% of them.
+
+The link restores exactly what you were looking at: location, zoom, which
+ratings are shown, and any selected street. The text is generated from the live
+build, so it cannot drift from what the map currently says.
+
 ## Where the gaps are
 
 `make build` ranks every high-stress segment whose two ends sit on *different*

@@ -61,6 +61,10 @@ export function render(props, { stats, aadtYear } = {}) {
 
     <p class="note">${escapeHtml(basis)}</p>
 
+    <nav class="panel-nav" aria-label="Actions for this street">
+      <button class="btn" data-nav="share">Share this street</button>
+    </nav>
+
     <p class="tech">
       LTS ${props.lts} · ${escapeHtml(conf.label)} confidence ·
       <a href="./data/methodology.json">what do these ratings mean?</a>

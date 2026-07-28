@@ -12,8 +12,11 @@ import { announce, easeTo, isCoarsePointer } from './lib/a11y.js';
 import { debounce, onPopState, read, write } from './lib/urlstate.js';
 import { checkSupport, createMap, setBasemap } from './map.js';
 import { Panel } from './panel.js';
+import * as browse from './views/browse.js';
 import * as detail from './views/detail.js';
 import * as legend from './views/legend.js';
+import * as settings from './views/settings.js';
+import * as share from './views/share.js';
 
 const els = {
   loading: document.getElementById('loading'),
@@ -80,7 +83,91 @@ function showLegend({ push = false } = {}) {
       syncUrl();
       showLegend();   // mileages describe what is drawn, so they all change
     },
+    onNav: (view) => openView(view, { push: true }),
   });
+  write(app.state, { push });
+}
+
+/* --- secondary views ---------------------------------------------------- */
+
+function openView(view, { push = true } = {}) {
+  if (view === 'browse') return showBrowse({ push });
+  if (view === 'share') return showShare({ push });
+  if (view === 'style') return showSettings({ push });
+  return showLegend({ push });
+}
+
+function showBrowse({ push = true } = {}) {
+  app.state.view = 'browse';
+
+  const draw = (loadedAll) => {
+    const index = browse.buildIndex(app.featuresById);
+    const body = app.panel.show({
+      title: 'Browse streets',
+      html: browse.render(index, { loadedAll }),
+    });
+    const ctl = browse.mount(body, index, {
+      onPick: (ids) => {
+        const f = app.featuresById.get(ids[0]);
+        if (!f) return;
+        app.state.selected = f.id;
+        restoreSelection(true);
+      },
+    });
+    // Focus the search box: this view exists for people not using a mouse.
+    ctl.focus();
+    announce(`Browsing ${index.length} streets by name.`);
+    return index;
+  };
+
+  draw(app.residentialIndexed === true);
+
+  // The non-map path has to be complete or it is a second-class experience, so
+  // pull in the quiet-street names even though the layer stays hidden. The data
+  // is only fetched once; the layer's visibility is untouched.
+  if (!app.residentialIndexed && app.residential) {
+    app.residential.ensure().then(() => {
+      app.residentialIndexed = true;
+      if (app.state.view === 'browse') draw(true);
+    });
+  }
+
+  write(app.state, { push });
+}
+
+function showShare({ push = true } = {}) {
+  app.state.view = 'share';
+  const seg = app.state.selected != null
+    ? app.featuresById.get(app.state.selected)?.properties
+    : null;
+  const segment = seg
+    ? { nm: seg.nm, ratingLabel: detailRatingWord(seg.lts) }
+    : null;
+  const body = app.panel.show({
+    title: 'Share this map',
+    html: share.render(app.stats, { segment }),
+  });
+  share.mount(body, { stats: app.stats, segment, announce });
+  app.panel.focusBody();
+  write(app.state, { push });
+}
+
+function showSettings({ push = true } = {}) {
+  app.state.view = 'style';
+  const body = app.panel.show({
+    title: 'Map style',
+    html: settings.render(app.state.basemap),
+  });
+  settings.mount(body, {
+    current: app.state.basemap,
+    onPick: (key) => {
+      app.state.basemap = key;
+      setBasemap(app.map, key);
+      syncUrl();
+      announce(`Map style set to ${key}.`);
+    },
+  });
+  app.panel.focusBody();
   write(app.state, { push });
 }
 
@@ -90,9 +177,12 @@ function showDetail(feature, { push = true } = {}) {
   app.state.selected = feature.id;
   select(feature);
 
-  app.panel.show({
+  const body = app.panel.show({
     title: props.nm || 'Unnamed street',
     html: detail.render(props, { stats: app.stats, aadtYear: app.aadtYear }),
+  });
+  body.querySelectorAll('[data-nav]').forEach((btn) => {
+    btn.addEventListener('click', () => openView(btn.dataset.nav, { push: true }));
   });
   write(app.state, { push });
   announce(`Selected ${props.nm || 'unnamed street'}, rated ${
@@ -181,6 +271,23 @@ async function boot() {
 
   app.panel = new Panel({ onBack: () => history.back() });
 
+  // The skip link promises "browse streets as a list", so honour that rather
+  // than just moving focus into whatever the panel happens to be showing.
+  document.querySelector('.skip-link')?.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    showBrowse({ push: true });
+  });
+
+  // Escape returns to the overview from any secondary view, and clears a
+  // selection -- the conventional way out of a detail pane.
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    if (app.state.view && app.state.view !== 'legend') {
+      showLegend({ push: true });
+      app.panel.focusBody();
+    }
+  });
+
   let manifest;
   try {
     manifest = await loadManifest();
@@ -262,7 +369,7 @@ async function boot() {
   onPopState((next) => {
     app.state = { ...app.state, ...next };
     if (next.view === 'segment' && next.selected != null) restoreSelection(false);
-    else showLegend({ push: false });
+    else openView(next.view, { push: false });
   });
 }
 

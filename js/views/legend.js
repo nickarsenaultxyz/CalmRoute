@@ -85,6 +85,11 @@ export function render(stats, state) {
       64% of the city's network and are switched off above to keep the bike
       network readable — turn them on to colour them in.
     </p>`}
+    <nav class="panel-nav" aria-label="More">
+      <button class="btn" data-nav="browse">Browse streets as a list</button>
+      <button class="btn" data-nav="share">Share</button>
+      <button class="btn" data-nav="style">Map style</button>
+    </nav>
     <p class="tech">
       Tap any street for its rating and the data behind it.
       ${state.residential
@@ -96,7 +101,11 @@ export function render(stats, state) {
 }
 
 /** Wire the switches. `onLts` / `onResidential` receive (value, isOn). */
-export function mount(root, { onLts, onResidential }) {
+export function mount(root, { onLts, onResidential, onNav }) {
+  root.querySelectorAll('[data-nav]').forEach((btn) => {
+    btn.addEventListener('click', () => onNav?.(btn.dataset.nav));
+  });
+
   root.querySelectorAll('[data-lts]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const on = btn.getAttribute('aria-checked') !== 'true';
