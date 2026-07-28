@@ -380,6 +380,21 @@ print(f"\n  Computing LTS for bike infrastructure...")
 bike_infra["LTS"] = bike_infra.apply(compute_lts, axis=1).astype(int)
 bike_infra['source'] = 'bike_infrastructure'
 
+# Separate planned/funded facilities from those that actually exist on the ground.
+# "Funded" projects are not yet built, so they must NOT be treated as existing
+# infrastructure: they should not count toward the LTS/connectivity network and
+# should not suppress the rating of the road they will someday parallel. They are
+# still shown on the map, but as a distinct "Planned" layer (toggled off).
+if 'Status' in bike_infra.columns:
+    __is_existing = bike_infra['Status'].astype(str).str.contains('Existing', case=False, na=False)
+else:
+    __is_existing = pd.Series(True, index=bike_infra.index)
+planned_infra = bike_infra[~__is_existing].copy()
+bike_infra = bike_infra[__is_existing].copy()
+print(f"\n  Split infrastructure by build status:")
+print(f"    Existing (used for network + ratings): {len(bike_infra)}")
+print(f"    Planned/Funded (shown as separate layer only): {len(planned_infra)}")
+
 print(f"\n  Bike infrastructure LTS distribution:")
 for lts in sorted(bike_infra['LTS'].unique()):
     count = (bike_infra['LTS'] == lts).sum()
@@ -482,6 +497,23 @@ unbikeable_network['__fac_cat'] = 'unbikeable'
 print(f"\n  Unbikeable streets (final): {len(unbikeable_network):,} segments")
 print(f"    These are major roads without dedicated bike infrastructure")
 
+# De-duplicate bikeable/residential streets that run parallel to dedicated bike
+# infrastructure. Where a street already has a bike facility, that facility's LTS
+# rating governs, so we drop the residential duplicate. This removes the
+# overlapping, conflicting lines (same street shown as both an LTS 1-4 facility
+# and an LTS 2-3 residential street) and avoids double-counting downstream.
+print(f"\n  Filtering residential streets that duplicate parallel bike infrastructure...")
+print(f"    Initial bikeable streets: {len(bikeable_network):,}")
+bikeable_m = project_to_local(bikeable_network)
+# One buffered corridor around all bike infra; measure how much of each street it covers
+bike_corridor = bike_infra_m.geometry.buffer(20).union_all()
+_res_len = bikeable_m.geometry.length.replace(0, np.nan)
+_res_cov = (bikeable_m.geometry.intersection(bike_corridor).length / _res_len).fillna(0)
+_res_keep = _res_cov < 0.5  # keep streets less than half-covered by a bike facility
+bikeable_network = bikeable_network[_res_keep.values].copy()
+print(f"    Filtered out {(~_res_keep).sum():,} residential duplicates of bike infrastructure")
+print(f"    Remaining bikeable streets: {len(bikeable_network):,}")
+
 print("\n" + "="*60)
 print("STEP 4: COMBINE ALL NETWORKS")
 print("="*60)
@@ -539,6 +571,27 @@ combined_simplified['geometry'] = combined_simplified['geometry'].simplify(
     tolerance=0.00001, preserve_topology=True
 )
 
+# Keep only the columns needed for display. The raw network carries 60+ attribute
+# columns; dropping them here dramatically shrinks the inlined GeoJSON in the HTML
+# (previously ~21 MB) and speeds up rendering in the browser.
+DISPLAY_COLS = ['geometry', 'LTS', 'Type_Facility', 'Name_Network',
+                'speed_mph', 'aadt', 'source']
+combined_simplified = combined_simplified[
+    [c for c in DISPLAY_COLS if c in combined_simplified.columns]
+]
+
+# Prepare the planned/funded facilities for their own display layer
+planned_simplified = planned_infra.copy()
+if not planned_simplified.empty:
+    planned_simplified['geometry'] = planned_simplified['geometry'].simplify(
+        tolerance=0.00001, preserve_topology=True
+    )
+    PLANNED_COLS = ['geometry', 'Type_Facility', 'Name_Network',
+                    'Status', 'Status_Notes', 'YearComplete']
+    planned_simplified = planned_simplified[
+        [c for c in PLANNED_COLS if c in planned_simplified.columns]
+    ]
+
 # Create map
 print("  Creating map...")
 m = folium.Map(
@@ -570,102 +623,105 @@ LTS_NAMES = {
     5: "Unbikeable (Major roads without infrastructure)"
 }
 
-# Add layers by LTS level (bike infrastructure + unbikeable only)
-print("  Adding map layers...")
-for lts_level in [1, 2, 3, 4, 5]:
+# Line styling by LTS: make the low-stress routes prominent and push the gray
+# "unbikeable" context roads into the background (thinner, more transparent).
+LTS_WEIGHTS = {1: 5, 2: 5, 3: 4, 4: 4, 5: 2.5}
+LTS_OPACITY = {1: 0.95, 2: 0.95, 3: 0.9, 4: 0.85, 5: 0.55}
+
+def build_tooltip(df):
+    """Build a GeoJsonTooltip from whichever display columns are present."""
+    fields, aliases = [], []
+    for col, alias in [('LTS', 'LTS Level'), ('Type_Facility', 'Type'),
+                       ('Name_Network', 'Street'), ('speed_mph', 'Speed (mph)'),
+                       ('aadt', 'AADT'), ('source', 'Source')]:
+        if col in df.columns:
+            fields.append(col)
+            aliases.append(alias)
+    return folium.GeoJsonTooltip(fields=fields, aliases=aliases,
+                                 localize=True, sticky=False)
+
+# Residential streets are drawn FIRST so they sit at the bottom as context.
+# Kept as a separate togglable layer.
+residential = combined_simplified[combined_simplified['source'] == 'bikeable_streets']
+if not residential.empty:
+    print(f"  Adding residential streets layer ({len(residential)} segments)...")
+    folium.GeoJson(
+        residential.to_json(),
+        name="Residential Streets (toggle off for bike network only)",
+        style_function=lambda feature: {
+            "color": LTS_COLORS.get(feature['properties']['LTS'], '#9CA3AF'),
+            "weight": 3,
+            "opacity": 0.55,
+            "lineJoin": "round",
+            "lineCap": "round"
+        },
+        tooltip=build_tooltip(residential),
+        highlight_function=lambda x: {"weight": 7, "opacity": 1.0},
+        overlay=True,
+        show=True,
+        smooth_factor=1.0
+    ).add_to(m)
+
+# Add the bike network (infrastructure + unbikeable) from HIGH stress to LOW stress
+# so the lowest-stress facilities end up painted ON TOP and are never buried under
+# the gray "unbikeable" roads (which previously overpainted them).
+print("  Adding map layers (low-stress drawn on top)...")
+for lts_level in [5, 4, 3, 2, 1]:
     subset = combined_simplified[
         (combined_simplified['LTS'] == lts_level) &
         (combined_simplified['source'] != 'bikeable_streets')
     ]
 
     if not subset.empty:
-        # Prepare tooltip fields
-        tooltip_fields = ['LTS']
-        tooltip_aliases = ['LTS Level']
-
-        if 'Type_Facility' in subset.columns:
-            tooltip_fields.append('Type_Facility')
-            tooltip_aliases.append('Type')
-
-        if 'Name_Network' in subset.columns:
-            tooltip_fields.append('Name_Network')
-            tooltip_aliases.append('Street')
-
-        if 'speed_mph' in subset.columns:
-            tooltip_fields.append('speed_mph')
-            tooltip_aliases.append('Speed (mph)')
-
-        if 'aadt' in subset.columns:
-            tooltip_fields.append('aadt')
-            tooltip_aliases.append('AADT')
-
-        tooltip_fields.append('source')
-        tooltip_aliases.append('Source')
-
         folium.GeoJson(
             subset.to_json(),
             name=LTS_NAMES[lts_level],
             style_function=lambda feature, lts=lts_level: {
                 "color": LTS_COLORS[lts],
-                "weight": 2,
-                "opacity": 0.8,
+                "weight": LTS_WEIGHTS[lts],
+                "opacity": LTS_OPACITY[lts],
                 "lineJoin": "round",
                 "lineCap": "round"
             },
-            tooltip=folium.GeoJsonTooltip(
-                fields=tooltip_fields,
-                aliases=tooltip_aliases,
-                localize=True,
-                sticky=False
-            ),
-            highlight_function=lambda x: {"weight": 6, "opacity": 1.0},
+            tooltip=build_tooltip(subset),
+            highlight_function=lambda x: {"weight": 8, "opacity": 1.0},
             overlay=True,
             show=True,
             smooth_factor=1.0
         ).add_to(m)
 
-# Add residential streets as a separate togglable layer
-residential = combined_simplified[combined_simplified['source'] == 'bikeable_streets']
-if not residential.empty:
-    print(f"  Adding residential streets layer ({len(residential)} segments)...")
-    res_tooltip_fields = ['LTS']
-    res_tooltip_aliases = ['LTS Level']
-    if 'Type_Facility' in residential.columns:
-        res_tooltip_fields.append('Type_Facility')
-        res_tooltip_aliases.append('Type')
-    if 'Name_Network' in residential.columns:
-        res_tooltip_fields.append('Name_Network')
-        res_tooltip_aliases.append('Street')
-    if 'speed_mph' in residential.columns:
-        res_tooltip_fields.append('speed_mph')
-        res_tooltip_aliases.append('Speed (mph)')
-    if 'aadt' in residential.columns:
-        res_tooltip_fields.append('aadt')
-        res_tooltip_aliases.append('AADT')
-
+# Add planned/funded facilities as a distinct dashed layer, OFF by default.
+# These are not built yet, so they are visually separated from the existing network
+# to avoid overstating what is actually rideable today.
+if not planned_simplified.empty:
+    print(f"  Adding planned/funded facilities layer ({len(planned_simplified)} segments)...")
+    p_fields, p_aliases = [], []
+    for col, alias in [('Name_Network', 'Street'), ('Type_Facility', 'Type'),
+                       ('Status', 'Status'), ('Status_Notes', 'Notes'),
+                       ('YearComplete', 'Est. Year')]:
+        if col in planned_simplified.columns:
+            p_fields.append(col)
+            p_aliases.append(alias)
     folium.GeoJson(
-        residential.to_json(),
-        name="Residential Streets (toggle off for bike network only)",
+        planned_simplified.to_json(),
+        name="Planned / Funded (not yet built)",
         style_function=lambda feature: {
-            "color": LTS_COLORS.get(feature['properties']['LTS'], '#9CA3AF'),
-            "weight": 2,
-            "opacity": 0.5,
+            "color": "#7C3AED",   # purple, distinct from any LTS color
+            "weight": 4,
+            "opacity": 0.9,
+            "dashArray": "8, 6",  # dashed = not built yet
             "lineJoin": "round",
             "lineCap": "round"
         },
-        tooltip=folium.GeoJsonTooltip(
-            fields=res_tooltip_fields,
-            aliases=res_tooltip_aliases,
-            localize=True,
-            sticky=False
-        ),
-        highlight_function=lambda x: {"weight": 6, "opacity": 1.0},
+        tooltip=folium.GeoJsonTooltip(fields=p_fields, aliases=p_aliases,
+                                      localize=True, sticky=False),
+        highlight_function=lambda x: {"weight": 7, "opacity": 1.0},
         overlay=True,
-        show=True,
+        show=False,  # hidden by default
         smooth_factor=1.0
     ).add_to(m)
 
-# Add legend 
+# Add legend
 lts_legend_html = """
 <div style="position: fixed; bottom: 20px; left: 20px; z-index: 9999;
             background: white; padding: 15px; border-radius: 8px;
@@ -721,10 +777,19 @@ Level of Traffic Stress (LTS)
 </div>
 </div>
 
+<div style="margin: 8px 0; display: flex; align-items: center;">
+<span style="display:inline-block; width:20px; height:0; margin-right:8px;
+             border-top:3px dashed #7C3AED;"></span>
+<div>
+    <b>Planned / Funded</b><br>
+    <small style="color: #666;">Not yet built (toggle on)</small>
+</div>
+</div>
+
 <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid #ddd;
             font-size: 11px; color: #666;">
-<b>Complete street coverage!</b><br>
-Shows all streets in Lexington classified by bikeability.
+<b>Existing network only.</b><br>
+Ratings reflect built infrastructure; planned projects are shown separately.
 </div>
 </div>
 """
