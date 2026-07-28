@@ -79,10 +79,19 @@ export function render(stats, state) {
       <span class="miles">${residentialMiles != null ? `${residentialMiles} mi` : ''}</span>
     </button>
     <p class="note">${EXISTING_ONLY_NOTE}</p>
+    ${state.residential ? '' : `
+    <p class="note">
+      <strong>Most grey streets are rated.</strong> Neighbourhood streets are
+      64% of the city's network and are switched off above to keep the bike
+      network readable — turn them on to colour them in.
+    </p>`}
     <p class="tech">
       Tap any street for its rating and the data behind it.
-      Grey streets on the base map are not in Lexington's centreline file —
-      usually private drives and apartment roads — so they carry no rating.
+      ${state.residential
+        ? 'A grey street is one the city\'s centreline file does not contain — '
+          + 'usually a private drive or an apartment road — so it has no rating.'
+        : 'A few grey streets stay grey either way: private drives and apartment '
+          + 'roads are not in the city\'s centreline file.'}
     </p>`;
 }
 
