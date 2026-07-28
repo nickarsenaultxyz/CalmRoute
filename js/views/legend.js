@@ -62,6 +62,7 @@ export function render(stats, state) {
     </p>` : '';
 
   return `
+    <p class="tagline">Lexington's bike network, and where it breaks</p>
     ${headline}
     <div class="legend" role="group" aria-label="Filter by comfort rating">
       ${rows}

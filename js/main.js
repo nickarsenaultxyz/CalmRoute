@@ -67,7 +67,7 @@ function showLegend({ push = false } = {}) {
   app.state.selected = null;
   clearSelection();
   const body = app.panel.show({
-    title: 'Lexington Bike Stress',
+    title: 'SPOKE',
     root: true,
     html: legend.render(app.stats, app.state),
   });

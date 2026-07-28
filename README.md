@@ -1,4 +1,6 @@
-# Lexington Bike Stress
+# SPOKE
+
+**Lexington's bike network, and where it breaks.**
 
 How comfortable is each street in Lexington, Kentucky to ride a bike on?
 

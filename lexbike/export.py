@@ -380,7 +380,7 @@ def print_stats(out_dir: Path) -> None:
         raise ExportError(f"no stats at {path}; run `make build` first")
     stats = json.loads(path.read_text())
 
-    print(f"\nLexington bike stress - ruleset {stats['ruleset_version']} "
+    print(f"\nSPOKE - Lexington bike stress - ruleset {stats['ruleset_version']} "
           f"(digest {stats['params_digest']})")
     print(f"generated {stats['generated']}\n")
     print(f"{'':4} {'segments':>9} {'miles':>8}   label")

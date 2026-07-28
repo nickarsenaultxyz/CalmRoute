@@ -107,7 +107,7 @@ export function mount(root, { stats, segment, council, announce } = {}) {
     // fall through to the clipboard rather than failing silently.
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'Lexington Bike Stress Map', text, url });
+        await navigator.share({ title: 'SPOKE — Lexington bike stress map', text, url });
         return;
       } catch (err) {
         if (err?.name === 'AbortError') return;   // user dismissed the sheet
