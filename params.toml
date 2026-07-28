@@ -182,9 +182,11 @@ speed_25_else_lts = 3
 speed_30_aadt_3000_lts = 2
 speed_30_else_lts = 3
 speed_35_lts = 3            # LOCKED: Mekuria/Furth Table 8. The single
-                            # highest-leverage parameter in the model —
-                            # 1,104 minor-collector segments hinge on it.
-                            # See docs/sensitivity.md before changing.
+                            # highest-leverage parameter in the model.
+                            # MEASURED: setting this to 2 moves the largest
+                            # island from 111.0 mi (12.0%) to 586.9 mi (52.9%)
+                            # and changes 1,591 segments. Read
+                            # docs/sensitivity.md before touching it.
 speed_40_plus_lts = 4
 lanes_4_5_speed_30_lts = 3
 lanes_4_5_else_lts = 4
@@ -335,7 +337,7 @@ sensitivity_flip_forces_low = true
 [[sensitivity.runs]]
 name = "mixed_35mph_as_lts2"
 set = { "lts.mixed.speed_35_lts" = 2 }
-why = "Dominant parameter: 1,104 minor-collector segments; largest island 42% vs 12%."
+why = "Dominant parameter. Measured: largest island 52.9% vs 12.0%, 1,591 segments changed."
 
 [[sensitivity.runs]]
 name = "aadt_break_2000"
@@ -350,7 +352,7 @@ why = "Upper bound on the same question."
 [[sensitivity.runs]]
 name = "conflation_buffer_8m"
 set = { "conflation.buffer_m" = 8.0 }
-why = "Measured 150 vs 252 conflated miles across the 8-20 m range."
+why = "Lower bound on the buffer. Measured: fails the 90% recall gate at 78.9%."
 
 [[sensitivity.runs]]
 name = "conflation_buffer_20m"
@@ -360,7 +362,7 @@ why = "Upper bound on conflation aggressiveness."
 [[sensitivity.runs]]
 name = "connector_15m"
 set = { "conflation.connector_max_m" = 15.0 }
-why = "Off-road trail attachment; 162 of 254 endpoints connect at 25 m."
+why = "Off-road trail attachment. Measured: barely matters, 12.0% either way."
 
 [[sensitivity.runs]]
 name = "connector_40m"

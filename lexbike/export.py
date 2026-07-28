@@ -64,7 +64,25 @@ class ExportError(Exception):
 #  Derived per-segment fields
 # ---------------------------------------------------------------------------
 
-def add_provenance(edges: gpd.GeoDataFrame, params: Params) -> gpd.GeoDataFrame:
+def load_flipped_ids(path: Path) -> set[int]:
+    """Segment ids whose LTS changes under some sensitivity variant.
+
+    Produced by ``lexbike sensitivity``. Absent on a first build, which is why
+    this returns an empty set rather than failing — but the confidence figures
+    then overstate certainty until the sweep has been run.
+    """
+    if not path.exists():
+        log.info(
+            "no sensitivity results at %s; confidence will not include the "
+            "LTS-flip demotion (run `make sensitivity`)", path,
+        )
+        return set()
+    return {int(x) for x in json.loads(path.read_text())}
+
+
+def add_provenance(
+    edges: gpd.GeoDataFrame, params: Params, flipped: set[int] | None = None
+) -> gpd.GeoDataFrame:
     """Add ``basis`` and ``cf`` (confidence).
 
     These exist so the map can be honest about a real weakness: KYTC only counts
@@ -98,6 +116,18 @@ def add_provenance(edges: gpd.GeoDataFrame, params: Params) -> gpd.GeoDataFrame:
         off_stream | ((src == io.AADT_STATION) & (has_facility | local)),
         CONF_HIGH, conf,
     )
+    # A rating that flips under a defensible parameter change is uncertain by
+    # definition, whatever its data provenance. This is the mechanical version
+    # of that claim rather than an asserted one.
+    if flipped and bool(params["confidence.sensitivity_flip_forces_low"]):
+        demote = out["id"].isin(flipped).to_numpy()
+        n_demoted = int((conf[demote] > CONF_LOW).sum())
+        conf = np.where(demote, CONF_LOW, conf)
+        log.info(
+            "confidence: %d segments demoted to low because their LTS flips "
+            "under a sensitivity variant", n_demoted,
+        )
+
     out["cf"] = conf.astype("int8")
     return out
 

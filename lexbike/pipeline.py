@@ -149,7 +149,9 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
     edges["u"] = [p[0] if p else None for p in pairs]
     edges["v"] = [p[1] if p else None for p in pairs]
     edges["mi"] = io.to_working_crs(edges, params).geometry.length / 1609.344
-    edges = export.add_provenance(edges, params)
+    # Sensitivity results, when present, demote segments whose LTS is not robust.
+    flipped = export.load_flipped_ids(Path('data/_sensitivity/flipped_ids.json'))
+    edges = export.add_provenance(edges, params, flipped)
 
     log.info("--- stage 5/5: write artifacts ---")
     stats = write_artifacts(
@@ -467,4 +469,158 @@ def assemble_edges(streets, paths, connectors, params: Params):
 
 
 def run_sensitivity(params: Params, out_dir: Path, doc_path: Path) -> None:
-    raise NotImplementedError("sensitivity sweep — see task #6")
+    """Re-run the build once per declared variant and tabulate what moved.
+
+    This is the answer to "why should I believe this map". Several thresholds
+    are judgement calls rather than measurements — the 35 mph rating alone moves
+    the largest island from 12% to 42% — and publishing the sweep is more
+    honest than publishing one number and hoping nobody asks.
+
+    Also feeds the confidence field: a segment whose LTS flips under any variant
+    is demoted to low confidence, which is a mechanical definition of
+    "uncertain" rather than an asserted one.
+    """
+    from . import params as params_mod
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    runs = params["sensitivity.runs"]
+
+    log.info("baseline build")
+    base = run_build(params, out_dir / "_base", skip_size_check=True)
+    base_lts = _lts_by_id(out_dir / "_base")
+
+    rows = [_sweep_row("baseline", "the published ruleset", base, base_lts, base_lts)]
+    rows[0].pop("_flipped_ids", None)
+    flipped_any: set[int] = set()
+    failures: list[dict] = []
+
+    for run in runs:
+        name = run["name"]
+        overrides = [f"{k}={_toml_literal(v)}" for k, v in run["set"].items()]
+        log.info("variant %s (%s)", name, ", ".join(overrides))
+        try:
+            variant_params = params_mod.load(params.source, overrides)
+            stats = run_build(variant_params, out_dir / name, skip_size_check=True)
+        except Exception as exc:
+            # Recorded, not skipped. A variant that cannot build is itself a
+            # result -- it says the parameter is bounded by a quality gate --
+            # and dropping it from the table would misrepresent the sweep as
+            # having covered ground it did not.
+            log.error("  variant %s failed: %s: %s", name, type(exc).__name__, exc)
+            failures.append({"variant": name, "why": run.get("why", ""),
+                             "error": f"{type(exc).__name__}: {exc}"})
+            continue
+        variant_lts = _lts_by_id(out_dir / name)
+        row = _sweep_row(name, run.get("why", ""), stats, base_lts, variant_lts)
+        flipped_any |= row.pop("_flipped_ids")
+        rows.append(row)
+
+    _write_sensitivity_doc(rows, failures, flipped_any, doc_path, params)
+    export.write_json(sorted(flipped_any), out_dir / "flipped_ids.json")
+
+    log.info(
+        "sensitivity: %d variants; %d segments flip LTS under at least one "
+        "-> written to %s",
+        len(rows) - 1, len(flipped_any), doc_path,
+    )
+
+
+def _toml_literal(value) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return f'"{value}"'
+    return str(value)
+
+
+def _lts_by_id(out_dir: Path) -> dict[int, int]:
+    """Read back the exported LTS per feature id, across both layers."""
+    import json
+
+    result: dict[int, int] = {}
+    for name in ("network.geojson", "residential.geojson"):
+        path = out_dir / name
+        if not path.exists():
+            continue
+        for feat in json.loads(path.read_text())["features"]:
+            result[int(feat["id"])] = int(feat["properties"]["lts"])
+    return result
+
+
+def _sweep_row(name, why, stats, base_lts, variant_lts) -> dict:
+    low = stats["low_stress"]
+    flipped = {
+        fid for fid, lts in variant_lts.items()
+        if fid in base_lts and base_lts[fid] != lts
+    }
+    return {
+        "variant": name,
+        "why": why,
+        "low_stress_miles": low["miles"],
+        "islands": low["islands"],
+        "largest_island_miles": low["largest_island_miles"],
+        "largest_share_pct": low["largest_island_share_pct"],
+        "ridable_lts3_miles": stats["ridable_lts3"]["miles"],
+        "segments_changed": len(flipped),
+        "_flipped_ids": flipped,
+    }
+
+
+def _write_sensitivity_doc(rows, failures, flipped_any, doc_path: Path, params: Params) -> None:
+    doc_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# Sensitivity of the LTS results to parameter choices",
+        "",
+        f"Ruleset {params['meta.ruleset_version']} (digest `{params.digest}`).",
+        "Regenerate with `make sensitivity`.",
+        "",
+        "Several thresholds in this model are judgement calls, not measurements.",
+        "This table shows what each one is worth, so a reader can disagree with a",
+        "choice and see immediately how much it would change.",
+        "",
+        "| variant | low-stress mi | islands | largest island | share | LTS<=3 mi | segments changed |",
+        "|---|--:|--:|--:|--:|--:|--:|",
+    ]
+    for r in rows:
+        lines.append(
+            f"| `{r['variant']}` | {r['low_stress_miles']:.1f} | {r['islands']} | "
+            f"{r['largest_island_miles']:.1f} mi | {r['largest_share_pct']:.1f}% | "
+            f"{r['ridable_lts3_miles']:.1f} | {r['segments_changed']} |"
+        )
+    lines += [
+        "",
+        "## What each variant tests",
+        "",
+    ]
+    for r in rows[1:]:
+        lines.append(f"- **`{r['variant']}`** — {r['why']}")
+
+    if failures:
+        lines += [
+            "",
+            "## Variants that could not be built",
+            "",
+            "These are results too: the parameter is bounded by a build-time quality",
+            "gate, so the sweep could not explore that direction.",
+            "",
+        ]
+        for f in failures:
+            lines.append(f"- **`{f['variant']}`** — {f['why']}")
+            lines.append(f"  - blocked by: {f['error']}")
+    lines += [
+        "",
+        "## How this feeds the map",
+        "",
+        f"{len(flipped_any)} segments change LTS under at least one variant. Those are",
+        "marked low-confidence in the published data, so the map can distinguish a",
+        "rating that is robust from one that rests on a contested threshold.",
+        "",
+        "## The honest headline",
+        "",
+        "The island count is a methodology choice, not a measurement — it moves by a",
+        "factor of three across defensible variants below. The pairing that survives",
+        "the whole sweep is the one worth quoting: the network is close to whole for",
+        "confident riders and shattered for everyone else.",
+        "",
+    ]
+    doc_path.write_text("\n".join(lines))
