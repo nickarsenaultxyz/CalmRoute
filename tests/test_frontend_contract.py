@@ -160,6 +160,24 @@ def test_layer_stats_let_the_legend_report_what_is_drawn(manifest):
         assert abs(summed.get(lts, 0) - total) < 0.5, f"LTS {lts} mileage disagrees"
 
 
+def test_sensitivity_sweep_sees_every_exported_feature(manifest, features):
+    """The sweep reads exported GeoJSON back to find segments whose LTS moves.
+
+    It must read every layer. When the export went from two layers to three, a
+    hardcoded file list dropped 3,996 context features and, worse, treated
+    segments that moved between files as absent rather than changed — the sweep
+    reported 315 changed segments instead of ~2,700, and the confidence field it
+    feeds silently overstated certainty.
+    """
+    from lexbike.pipeline import _lts_by_id
+
+    seen = _lts_by_id(DATA)
+    assert len(seen) == len(features), (
+        f"sweep sees {len(seen)} of {len(features)} features; "
+        "a layer is missing from its file list"
+    )
+
+
 def test_critical_path_stays_within_budget(manifest):
     """The whole point of the rebuild. Guarded here so a schema change cannot
     quietly reintroduce a multi-megabyte first paint."""

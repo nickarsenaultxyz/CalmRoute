@@ -1,0 +1,96 @@
+name: Build and deploy the map
+
+# Rebuilds the LTS data from source and publishes the site. Nothing generated
+# is committed: `data/` stays gitignored and is produced here on every deploy,
+# so the published map can never drift from the source data or the ruleset.
+#
+# REQUIRES a one-time repository setting: Settings -> Pages -> Source ->
+# "GitHub Actions". While Pages is on the legacy branch-based source this
+# workflow will run and succeed but nothing will be published.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it midway, but collapse
+# queued ones so a burst of pushes publishes once.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'   # params.py uses stdlib tomllib (3.11+)
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        # A failing suite must not reach the public map. The frontend-contract
+        # tests skip when data/ is absent, so they run again after the build.
+        run: python -m pytest tests/ -q
+
+      - name: Sensitivity sweep
+        # Produces data/_sensitivity/flipped_ids.json, which the build reads to
+        # demote segments whose rating is not robust to a parameter change.
+        # Without it the published confidence figures overstate certainty.
+        run: make sensitivity PY=python
+
+      - name: Drop sweep intermediates
+        # Each variant writes a full artifact set (~5 MB x 7). Only the
+        # flipped-ids list is an input to the real build; the rest must not be
+        # uploaded.
+        run: |
+          find data/_sensitivity -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
+          ls -la data/_sensitivity
+
+      - name: Build the data artifacts
+        run: make build PY=python
+
+      - name: Verify the frontend contract against the built data
+        run: python -m pytest tests/test_frontend_contract.py -q
+
+      - name: Assemble the site
+        # Copy only what the page fetches. Source GeoJSON, the Python package
+        # and the test suite are deliberately left out.
+        run: |
+          mkdir -p _site
+          cp index.html .nojekyll _site/
+          cp lexbike_connectivity_map.html _site/    # redirect stub for the old URL
+          cp -r assets js _site/
+          mkdir -p _site/data
+          cp data/*.geojson data/*.json _site/data/
+          echo "--- published tree ---"
+          find _site -type f | sort
+          echo "--- total ---"
+          du -sh _site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

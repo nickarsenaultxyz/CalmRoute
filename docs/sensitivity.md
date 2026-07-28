@@ -1,6 +1,6 @@
 # Sensitivity of the LTS results to parameter choices
 
-Ruleset 2.0.0 (digest `1612b0859fe3`).
+Ruleset 2.0.0 (digest `ecd9453942fb`).
 Regenerate with `make sensitivity`.
 
 Several thresholds in this model are judgement calls, not measurements.

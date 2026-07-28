@@ -576,11 +576,28 @@ def _toml_literal(value) -> str:
 
 
 def _lts_by_id(out_dir: Path) -> dict[int, int]:
-    """Read back the exported LTS per feature id, across both layers."""
+    """Read back the exported LTS per feature id, across EVERY layer.
+
+    Driven by the manifest rather than a hardcoded file list. That is not
+    fussiness: when the export went from two layers to three, a hardcoded list
+    silently dropped the 3,996 context features from the sweep. It also
+    under-counted flips generally, because a segment changing from LTS 3 to 2
+    *moves between files* — it looked absent from the baseline rather than
+    changed, so it was skipped. The sweep reported 315 changed segments instead
+    of ~2,700, and the confidence field it feeds overstated certainty.
+    """
     import json
 
+    manifest_path = out_dir / "manifest.json"
+    if manifest_path.exists():
+        files = json.loads(manifest_path.read_text())["files"]
+        names = [v for k, v in files.items() if str(v).endswith(".geojson")
+                 and k not in ("planned", "gapsGeometry")]
+    else:
+        names = ["network.geojson", "context.geojson", "residential.geojson"]
+
     result: dict[int, int] = {}
-    for name in ("network.geojson", "residential.geojson"):
+    for name in names:
         path = out_dir / name
         if not path.exists():
             continue
