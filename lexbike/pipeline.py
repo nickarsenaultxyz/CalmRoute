@@ -169,18 +169,37 @@ def write_artifacts(
     """Write every file the frontend fetches."""
     rules = lts_mod.Ruleset.from_params(params)
 
-    # Split so first paint needs only the hero data. Everything that is NOT a
-    # plain low-stress street with no facility goes in the priority layer:
-    # facilities, trails, connectors, and every busy or prohibited road. The
-    # remainder is the residential bulk, which is visual mush at the default
-    # city-wide zoom and can arrive after first paint.
+    # Three disjoint layers, split by the role each plays in answering "can I
+    # ride here", because that is also the order they are needed in:
+    #
+    #   network      built bike facilities and trails -- the actual answer, and
+    #                the only thing on the critical path
+    #   context      busy and prohibited roads with no facility -- the skeleton
+    #                that makes the map legible, fetched right after
+    #   residential  quiet streets with no facility -- 8,900 features that are
+    #                visual mush at the city-wide default zoom, so they wait for
+    #                an idle callback or a zoom past 13
+    #
+    # An earlier split put context in the critical path; measured, it was 170 KB
+    # of the 245 KB priority layer, for data that is background.
     is_low = edges["lts"].map(lambda v: lts_mod.is_low_stress(v, rules))
-    priority = edges[(edges["fac"] != "none") | ~is_low].copy()
-    residential = edges[(edges["fac"] == "none") & is_low].copy()
-    log.info("layer split: %d priority / %d residential", len(priority), len(residential))
+    has_fac = edges["fac"] != "none"
 
-    export.write_geojson(priority, out_dir / "network.geojson", params,
+    network = edges[has_fac].copy()
+    context = edges[~has_fac & ~is_low].copy()
+    residential = edges[~has_fac & is_low].copy()
+
+    assert len(network) + len(context) + len(residential) == len(edges), \
+        "layer split must partition the network"
+    log.info(
+        "layer split: %d facilities / %d context / %d residential",
+        len(network), len(context), len(residential),
+    )
+
+    export.write_geojson(network, out_dir / "network.geojson", params,
                          simplify=float(params["export.simplify_priority"]))
+    export.write_geojson(context, out_dir / "context.geojson", params,
+                         simplify=float(params["export.simplify_residential"]))
     export.write_geojson(residential, out_dir / "residential.geojson", params,
                          simplify=float(params["export.simplify_residential"]))
 
@@ -253,6 +272,7 @@ def write_artifacts(
             "low_stress_max": rules.low_stress_max,
             "files": {
                 "network": "network.geojson",
+                "context": "context.geojson",
                 "residential": "residential.geojson",
                 "graph": "graph.json",
                 "islands": "islands.json",
@@ -263,7 +283,8 @@ def write_artifacts(
                 "methodology": "methodology.json",
             },
             "counts": {
-                "network": len(priority),
+                "network": len(network),
+                "context": len(context),
                 "residential": len(residential),
                 "nodes": len(node_ids),
                 "islands": len(islands),

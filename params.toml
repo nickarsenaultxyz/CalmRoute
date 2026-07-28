@@ -297,8 +297,9 @@ simplify_residential = 0.00003
 # regression cannot quietly reintroduce a multi-megabyte payload. The old
 # index.html shipped 904 KB gzipped with every byte on the critical path.
 [export.budget_kb]
-"network.geojson" = 260        # critical path
-"residential.geojson" = 420    # deferred
+"network.geojson" = 90         # critical path: built facilities only
+"context.geojson" = 200        # busy/prohibited roads, fetched right after
+"residential.geojson" = 420    # quiet streets, deferred to idle or z>=13
 "graph.json" = 200
 "planned.geojson" = 20
 "islands.json" = 30
