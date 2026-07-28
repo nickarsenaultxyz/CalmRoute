@@ -202,6 +202,89 @@ def load_aadt(params: Params, path: Path = AADT_PATH) -> pd.Series:
     return by_station.rename("aadt")
 
 
+#: ``aadt_src`` codes, published in methodology.json.
+AADT_STATION = 0
+AADT_IMPUTED_NARROW = 1
+AADT_IMPUTED_COARSE = 2
+
+
+def attach_aadt(
+    streets: gpd.GeoDataFrame, by_station: pd.Series, params: Params
+) -> gpd.GeoDataFrame:
+    """Resolve a traffic volume for every segment, recording how.
+
+    Two-part policy replacing the old code's per-branch improvisation:
+
+    1. Join real counts on the KYDOT route key.
+    2. Impute the rest from group medians, cascading to progressively coarser
+       keys, so no segment reaches the classifier with an unresolved volume.
+
+    ``aadt_src`` records which happened, and it drives the confidence field and
+    the "this is an estimate" note in the UI. The distinction matters: KYTC only
+    counts state-maintained routes, so an imputed value on a local street is
+    drawn from the busiest third of its class and is systematically high.
+    """
+    gdf = streets.copy()
+    gdf["aadt"] = pd.NA
+    gdf["aadt_src"] = pd.NA
+
+    if len(by_station) and "KYDOT" in gdf.columns:
+        key = _norm_text(gdf["KYDOT"])
+        matched = key.map(by_station)
+        gdf["aadt"] = matched
+        gdf.loc[matched.notna(), "aadt_src"] = AADT_STATION
+        log.info(
+            "AADT: matched %d / %d segments to a count station via KYDOT",
+            int(matched.notna().sum()), len(gdf),
+        )
+
+    groups: list[list[str]] = [list(g) for g in params["aadt.impute_groups"]]
+    floor = float(params["aadt.impute_floor"])
+
+    for depth, keys in enumerate(groups):
+        missing = gdf["aadt"].isna()
+        if not missing.any():
+            break
+        usable = [k for k in keys if k in gdf.columns]
+        if len(usable) != len(keys):
+            log.warning("AADT imputation: skipping group %s (missing columns)", keys)
+            continue
+        # Medians come only from real counts, never from earlier imputations,
+        # so a coarse fallback cannot be contaminated by a narrow one.
+        real = gdf[gdf["aadt_src"] == AADT_STATION]
+        if real.empty:
+            break
+        medians = real.groupby(usable, dropna=False)["aadt"].median()
+        filled = gdf.loc[missing].set_index(usable).index.map(medians)
+        gdf.loc[missing, "aadt"] = pd.Series(filled, index=gdf.index[missing], dtype="float64")
+        now_filled = missing & gdf["aadt"].notna()
+        gdf.loc[now_filled, "aadt_src"] = (
+            AADT_IMPUTED_NARROW if depth == 0 else AADT_IMPUTED_COARSE
+        )
+        log.info(
+            "AADT: imputed %d segments from %s medians",
+            int(now_filled.sum()), "+".join(usable),
+        )
+
+    still_missing = gdf["aadt"].isna()
+    if still_missing.any():
+        gdf.loc[still_missing, "aadt"] = floor
+        gdf.loc[still_missing, "aadt_src"] = AADT_IMPUTED_COARSE
+        log.info("AADT: %d segments fell back to the floor (%d)", int(still_missing.sum()), floor)
+
+    gdf["aadt"] = pd.to_numeric(gdf["aadt"], errors="coerce").astype("float64")
+    gdf["aadt_src"] = gdf["aadt_src"].astype("int8")
+
+    breakdown = gdf["aadt_src"].value_counts().sort_index().to_dict()
+    log.info(
+        "AADT provenance: station=%d narrow=%d coarse=%d",
+        breakdown.get(AADT_STATION, 0),
+        breakdown.get(AADT_IMPUTED_NARROW, 0),
+        breakdown.get(AADT_IMPUTED_COARSE, 0),
+    )
+    return gdf
+
+
 def aadt_years(path: Path = AADT_PATH) -> dict[str, int]:
     """Count-year range, published so the map can date its traffic figures."""
     if not path.exists():
