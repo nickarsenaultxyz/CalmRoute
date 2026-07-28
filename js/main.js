@@ -15,6 +15,7 @@ import { Panel } from './panel.js';
 import * as browse from './views/browse.js';
 import * as detail from './views/detail.js';
 import * as legend from './views/legend.js';
+import * as methodology from './views/methodology.js';
 import * as settings from './views/settings.js';
 import * as share from './views/share.js';
 
@@ -94,6 +95,7 @@ function openView(view, { push = true } = {}) {
   if (view === 'browse') return showBrowse({ push });
   if (view === 'share') return showShare({ push });
   if (view === 'style') return showSettings({ push });
+  if (view === 'methodology') return showMethodology({ push });
   return showLegend({ push });
 }
 
@@ -153,6 +155,16 @@ function showShare({ push = true } = {}) {
     html: share.render(app.stats, ctx),
   });
   share.mount(body, ctx);
+  app.panel.focusBody();
+  write(app.state, { push });
+}
+
+function showMethodology({ push = true } = {}) {
+  app.state.view = 'methodology';
+  app.panel.show({
+    title: 'What the ratings mean',
+    html: methodology.render(app.methodology, app.stats),
+  });
   app.panel.focusBody();
   write(app.state, { push });
 }
@@ -308,11 +320,18 @@ async function boot() {
   const map = createMap(manifest, app.state);
   app.map = map;
 
+  // Capture what the URL asked for before anything overwrites it: showLegend()
+  // sets state.view = 'legend', so by the time the data has loaded the original
+  // request is gone.
+  const requestedView = app.state.view;
+
   // Numbers before geometry: ~18 KB gets every figure and the legend on screen
   // while the network is still downloading.
   loadStats(manifest).then((s) => {
     app.stats = s;
     app.aadtYear = s?.data_sources?.aadt_count_years?.median ?? null;
+    // Render the overview immediately so the panel is never blank; the URL's
+    // own view is restored below, once the data it may depend on has arrived.
     if (app.state.view !== 'segment') showLegend();
   }).catch((err) => console.warn('stats unavailable', err));
 
@@ -373,7 +392,14 @@ async function boot() {
       },
     });
 
-    if (app.state.selected != null) restoreSelection();
+    // Restore whatever the URL asked for. This runs after the network layer
+    // has loaded because several views read from it -- a shared link to
+    // ?view=browse or ?view=methodology used to fall back to the overview.
+    if (app.state.selected != null) {
+      restoreSelection();
+    } else if (requestedView && !['legend', 'segment'].includes(requestedView)) {
+      openView(requestedView, { push: false });
+    }
 
     map.on('moveend', syncUrl);
   });
