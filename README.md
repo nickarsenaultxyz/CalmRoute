@@ -1,157 +1,192 @@
-# Lexington Bikestress with Residential Streets
+# Lexington Bike Stress
 
-A Python tool for analyzing bicycle Level of Traffic Stress (LTS) across Lexington, Kentucky's complete street network. This project extends traditional bike infrastructure analysis by incorporating residential streets as viable cycling routes.
+How comfortable is each street in Lexington, Kentucky to ride a bike on?
 
-## Overview
+This computes a **Level of Traffic Stress (LTS)** rating for all 1,752 miles of
+Lexington's street network — not just the streets that already have bike
+infrastructure — and analyses how well the low-stress parts connect to each
+other.
 
-This project computes LTS ratings for the entire Lexington street network, providing a complete picture of bikeable routes:
+Live map: <https://nickarsenaultxyz.github.io/Lex-Bike-Data/>
 
-- **Bike Infrastructure**: Existing bike lanes, paths, and facilities rated LTS 1-4
-- **Residential Streets**: Local roads (RDCLASS 5-8) added as bikeable routes where no dedicated infrastructure exists
-- **Major Roads**: Arterials and collectors without bike infrastructure marked as "unbikeable" (LTS 5)
+---
 
-The analysis is based on the methodology from Furth & Mekuria (2013)
+## The finding
 
-## LTS Ratings
+> **About 1,220 miles are ridable for a confident rider, in one nearly-whole
+> network. But the 922 miles that are comfortable for an ordinary adult are
+> shattered into 986 disconnected islands, and the largest holds only 12% of
+> them.**
 
-| LTS | Description | Suitable For |
-|-----|-------------|--------------|
-| 1 | Very Low Stress | Children, all ages/abilities |
-| 2 | Low Stress | Most adults comfortable |
-| 3 | Moderate Stress | Confident cyclists |
-| 4 | High Stress | Strong & fearless only |
-| 5 | Unbikeable | Major roads without infrastructure |
+Lexington's problem is not a shortage of quiet streets. It is that the quiet
+streets do not join up: to get between almost any two neighbourhoods you have to
+cross something stressful.
 
-## Scripts
+Both halves of that sentence matter, and they are quoted together deliberately.
+The island count is a **methodology choice, not a measurement** — it swings by a
+factor of two depending on how you rate a 35 mph collector. The LTS ≤ 3 mileage
+does not move at all across every variant tested. See
+[docs/sensitivity.md](docs/sensitivity.md), which is generated, not asserted.
 
-### `lex-lts.py`
+## The ratings
 
-Main analysis script that:
-1. Loads existing bike infrastructure from `lexbike.geojson`
-2. Loads Lexington street data from `lex_street_data.geojson`
-3. Computes LTS for bike infrastructure based on facility type, speed, and AADT
-4. Classifies all streets by road type (RDCLASS)
-5. Adds residential/local streets as bikeable routes (LTS 2-3)
-6. Marks major roads without infrastructure as unbikeable (LTS 5)
-7. Generates an interactive Folium map
+| LTS | Label | Who it is for | Miles |
+|----:|---|---|----:|
+| 1 | Relaxed | Kids and new riders | 221.5 |
+| 2 | Comfortable for most adults | Quiet streets and bike lanes | 700.6 |
+| 3 | Busy | Confident riders | 301.4 |
+| 4 | Stressful | Experienced riders only | 398.1 |
+| 0 | Bikes not permitted | Interstates and parkways | 130.9 |
 
-**Output files:**
-- `lexbike_with_residential.geojson` - Combined network with LTS ratings
-- `index.html` - Interactive web map
+The scale is 0–4. **There is no LTS 5.** Furth and Mekuria define 1–4, and an
+earlier version of this project used "LTS 5" for two different things — roads
+where cycling is illegal, and roads that are merely unpleasant. Those are
+distinct facts a rider needs, so they are now `0` and `4`.
 
-### `lts_connectivity_analysis.py`
+## How honest is it?
 
-Network connectivity analysis that:
-1. Builds a graph from the LTS-rated street network
-2. Filters to low-stress links (LTS <= 2 by default)
-3. Identifies connected components ("islands" of low-stress cycling)
-4. Visualizes clusters in different colors
-5. Calculates connectivity metrics
+Only **15% of segments have a measured traffic count**. KYTC counts
+state-maintained routes, so volumes on local streets are imputed from class
+medians drawn from the busiest third of each class — which biases them high.
 
-**Output files:**
-- `lexbike_connectivity_clusters.geojson` - Cluster assignments
-- `lexbike_connectivity_map.html` - Interactive cluster visualization
+Every segment therefore ships with:
 
-## Road Classification (RDCLASS)
+- **`basis`** — whether its rating rests on facility type alone, on type and
+  posted speed, or on type, speed and a real traffic count.
+- **`cf`** — confidence. A segment is demoted to *low* if its volume is coarsely
+  imputed **or** if its rating flips under any variant in the sensitivity sweep.
+  That second condition makes "uncertain" mechanical rather than asserted.
 
-| RDCLASS | Type | Treatment |
-|---------|------|-----------|
-| 1 | Interstate/Highway | Unbikeable (LTS 5) |
-| 2 | Parkway/Expressway | Unbikeable (LTS 5) |
-| 3 | Arterial | Unbikeable (LTS 5) |
-| 4 | Major Collector | Unbikeable (LTS 5) |
-| 5 | Minor Collector | Bikeable (LTS 2-3) |
-| 6 | Local Street | Bikeable (LTS 2-3) |
-| 7 | Service Road | Bikeable (LTS 2-3) |
-| 8 | Alley | Bikeable (LTS 2-3) |
+Of low-stress mileage: **6.5% high confidence, 74.1% medium, 19.4% low.**
 
-## Requirements
+Known limitations, also published in `data/methodology.json`:
 
-```
-numpy
-pandas
-geopandas
-pyogrio
-folium
-networkx
-shapely
-```
-
-## Input Data
-
-- `lexbike.geojson` - Existing bike infrastructure (bike lanes, paths, trails)
-- `lex_street_data.geojson` - Complete Lexington street network with RDCLASS and speed attributes
+- Lane counts are in no source; they are inferred from road class, one-way
+  status and cartographic class, and shipped as a property so you can audit it.
+- On-street parking and bike lane width are not modelled — neither is recorded.
+- Ratings describe **built** infrastructure only. Funded projects are separate.
 
 ## Usage
 
 ```bash
-# Generate LTS network with residential streets
-python bikestress_route_with_residential.py
+pip install -r requirements.txt
 
-# Run connectivity analysis
-python lts_connectivity_analysis.py
+make build         # compute ratings, write data/
+make validate      # golden corridors + aggregate stability
+make sensitivity   # parameter sweep -> docs/sensitivity.md
+make stats         # print the current build's figures
+make test          # run the test suite
+make serve         # serve the map at http://localhost:8000/
 ```
 
-## LTS Calculation Logic
+Or `python -m lexbike build --help`. Any threshold can be overridden for a
+one-off run:
 
-### Bike Infrastructure
-- **Protected/Path**: LTS 1
-- **Buffered Lane**: LTS 2 (if speed <= 30 mph), else LTS 3
-- **Bike Lane**: LTS 2-4 based on speed and AADT
-- **Mixed/Sharrow**: LTS 2-4 based on speed and traffic
+```bash
+python -m lexbike build --set lts.mixed.speed_35_lts=2 --out data/experiment
+```
 
-### Residential Streets
-- **Local Streets (RDCLASS 6)**: LTS 2 if speed <= 25 mph, else LTS 3
-- **Minor Collectors (RDCLASS 5)**: LTS 2 if speed <= 25 mph, else LTS 3
-- Maximum speed limit for inclusion: 35 mph
+## How it works
 
-## Connectivity Cluster Analysis
+**`params.toml` is the single source of truth.** Every threshold lives there,
+and it is serialized into `data/methodology.json` at build time, so the
+published methodology cannot drift from the rules that produced the numbers.
+Each build stamps a digest of the effective ruleset into `stats.json`, so any
+screenshot can be traced back to the rules behind it.
 
-The `lts_connectivity_analysis.py` script performs network connectivity analysis based on Furth & Mekuria's methodology.
+```
+lexbike/
+  io.py         load and validate the LFUCG and KYTC sources
+  conflate.py   attach bike facilities to street centrelines
+  lts.py        the classifier — pure functions, no I/O, no pandas
+  network.py    graph, low-stress islands, barrier ranking
+  export.py     the artifacts the map fetches
+  pipeline.py   orchestration
+```
 
-### Methodology
+### The central design decision
 
-1. **Graph Construction**: Street segments become edges in a NetworkX graph, with endpoints snapped together within a 15m tolerance
-2. **Low-Stress Filtering**: Only segments at or below the LTS threshold (default: LTS 2) are included
-3. **Component Detection**: Connected components identify "islands" of continuous low-stress cycling
-4. **Cluster Metrics**: Each cluster is measured by segment count and total miles
+**The LFUCG centreline layer is the one canonical network.** On-road bike
+facilities become *attributes* of a centreline; only off-road paths keep their
+own geometry, joined to the streets by explicit connector edges that are drawn
+on the map so you can see and argue with each one.
 
-### Key Concepts
+This matters because the two source layers are independently digitized and
+share almost no nodes — only 241 of the bike layer's 1,056 endpoints land within
+a metre of a centreline endpoint. Treating them as one network required
+reconciliation filters that silently deleted 2,417 street segments. Making
+centrelines canonical removes that entire class of problem.
 
-- **Connectivity Clusters**: Groups of streets reachable without using high-stress links
-- **Barriers**: High-stress roads (arterials, highways) that separate low-stress clusters
-- **LTS 2 Threshold**: Represents routes comfortable for "most adults" - the mainstream cycling population
+### Inputs
 
-### Interpreting Results
+| File | Source | Contents |
+|---|---|---|
+| `lex_street_data.geojson` | LFUCG | 13,775 street centrelines |
+| `lexbike.geojson` | LFUCG | 528 bike facility segments |
+| `StaList_Fayette (1).csv` | KYTC | 546 traffic count stations |
 
-The analysis reveals network fragmentation:
-- Many small, disconnected low-stress islands exist throughout the city
-- The largest cluster contains only a fraction of total low-stress miles
-- Gaps between clusters represent infrastructure improvement opportunities
+A note on the bike layer, because it is easy to misread: `Type_Facility` is the
+facility that physically exists. `AltType_Facility` is a *recommended upgrade*,
+not infrastructure — 37 segments on Redding Rd are `Type = Preferred Route` with
+`AltType = Bicycle Lane`, and their `Name_Facility` reads
+`EXISTING PREFERRED ROUTE`. Only `Type_Facility` feeds a rating; `AltType` feeds
+the "what if we built it" scenario.
 
-### Configuration
+Lexington has **90.3 miles of on-road bike treatment** (53.4 bike lane, 19.1
+shoulder, 12.1 buffered lane, 5.7 sharrow). The bike layer spans 219.7 on-road
+miles, but the other 129.4 are `Preferred Route` — signed wayfinding with no
+physical treatment, which earns no rating credit.
 
-Key parameters in the script:
-- `LTS_THRESHOLD = 2` - Maximum LTS level for "low stress" connectivity
-- `SNAP_TOLERANCE = 15` - Meters for snapping street endpoints together
-- `MIN_CLUSTER_SEGMENTS = 3` - Minimum segments to display a cluster
+### Outputs
 
-### Improvement Priorities
+Written to `data/` (gitignored — regenerate with `make build`):
 
-Based on the analysis, infrastructure improvements should focus on:
-1. Identifying strategic barrier crossings (arterials, highways)
-2. Prioritizing connections between large clusters
-3. Adding protected infrastructure on high-stress barriers
+| File | Gzipped | Purpose |
+|---|--:|---|
+| `network.geojson` | 246 KB | facilities, trails, busy roads — the critical path |
+| `residential.geojson` | 358 KB | quiet-street bulk, loaded after first paint |
+| `graph.json` | 196 KB | 10,842 nodes for client-side routing |
+| `gaps.json` | 11 KB | 316 ranked barrier crossings |
+| `islands.json` | 5 KB | connected low-stress components |
+| `stats.json`, `methodology.json`, `manifest.json`, `planned.geojson` | < 4 KB | |
 
-## Key Findings
+## Where the gaps are
 
-The connectivity analysis reveals how fragmented the low-stress network is. When filtering to LTS <= 2 (routes comfortable for most adults):
-- The network breaks into many disconnected clusters
-- Cyclists must use high-stress roads to travel between most areas
-- Strategic infrastructure improvements could connect these islands
+`make build` ranks every high-stress segment whose two ends sit on *different*
+low-stress islands — treat it and the islands merge. The top crossings are
+W Second St, E High St, Leestown Rd, Price Rd, Keithshire Way and Iron Works
+Pike.
 
-## References
+One caveat the data carries explicitly: several streets often cross between the
+same pair of islands, so they are **alternatives, not additive wins**. Fixing
+any one merges that pair. `best_for_pair` marks the cheapest option and
+`alternatives` counts the rest, so their "miles unlocked" can never be summed by
+mistake.
 
-Mekuria, M. C., Furth, P. G., & Nixon, H. (2012). Low-stress bicycling and network connectivity. Mineta Transportation Institute.
+## Validation
 
-Furth, P. G., Mekuria, M. C., & Nixon, H. (2016). Network connectivity for low-stress bicycling. Transportation Research Record, 2587(1), 41-49.
+Three checks, each catching what the others miss:
+
+- **Golden corridors** (`tests/golden_corridors.csv`) pin specific real segments
+  a person has looked at and judged. Catches a rule change that is wrong in a
+  way the totals hide. *Currently a template — `expected_lts` is unlabelled, and
+  `make validate` says so loudly.*
+- **Aggregate stability** (`tests/baseline_stats.json`) pins the headline
+  figures within tolerance. Catches a change that is wrong everywhere at once,
+  which a handful of hand-picked corridors would miss.
+- **Sensitivity sweep** asks a different question: not "did this change?" but
+  "how much would it change if a judgement call went the other way?"
+
+The build also fails rather than publishing when conflation quality drops
+(recall below 90%, or inflation above 1.45×), when an artifact exceeds its size
+budget, or when the source data contains a facility type or road class the rules
+do not cover.
+
+## Method
+
+Mekuria, Furth & Nixon (2012), *Low-Stress Bicycling and Network Connectivity*,
+Mineta Transportation Institute. Furth, Mekuria & Nixon (2016), *Network
+Connectivity for Low-Stress Bicycling*, TRR 2587.
+
+Departures from the source method, all forced by what Lexington's data actually
+contains, are listed in `data/methodology.json`.
