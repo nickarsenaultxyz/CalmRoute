@@ -28,7 +28,7 @@ function fact(label, value, unknownText) {
   return `<tr><th>${label}</th><td>${escapeHtml(value)}</td></tr>`;
 }
 
-export function render(props, { stats, aadtYear } = {}) {
+export function render(props, { stats, aadtYear, council } = {}) {
   const lts = LTS[props.lts] || LTS[4];
   const name = props.nm || 'Unnamed street';
   const conf = CONFIDENCE[props.cf ?? 1];
@@ -57,18 +57,29 @@ export function render(props, { stats, aadtYear } = {}) {
       ${props.isl != null
         ? fact('Low-stress island', `#${props.isl}`, '—')
         : ''}
+      ${councilRow(props, council)}
     </table>
 
     <p class="note">${escapeHtml(basis)}</p>
 
     <nav class="panel-nav" aria-label="Actions for this street">
-      <button class="btn" data-nav="share">Share this street</button>
+      <button class="btn" data-nav="share">Share or write about this street</button>
     </nav>
 
     <p class="tech">
       LTS ${props.lts} · ${escapeHtml(conf.label)} confidence ·
       <a href="./data/methodology.json">what do these ratings mean?</a>
     </p>`;
+}
+
+/** Which council member represents this street. Shown here because it is a
+ *  fact about the street, and because it makes the email action's recipient
+ *  visible before the user commits to opening a draft. */
+function councilRow(props, council) {
+  if (props.cd == null) return '';
+  const rep = council?.districts?.[String(props.cd)];
+  const who = rep?.name ? ` — ${rep.name}` : '';
+  return `<tr><th>Council district</th><td>${props.cd}${escapeHtml(who)}</td></tr>`;
 }
 
 /** Compact hover preview: name and rating only, no DOM churn beyond this. */

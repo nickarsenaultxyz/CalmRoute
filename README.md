@@ -184,6 +184,27 @@ The link restores exactly what you were looking at: location, zoom, which
 ratings are shown, and any selected street. The text is generated from the live
 build, so it cannot drift from what the map currently says.
 
+### Writing to a council member
+
+Select a street and the map drafts a message to **the council member who
+actually represents it** — naming the street, its rating, and the citywide
+finding, with a link back to that exact view. Which member that is depends on
+where the street is, so a single generic address would send most messages to
+the wrong person.
+
+The roster is read from
+[LFUCG's published council district layer](https://data.lexingtonky.gov/datasets/lfucg::council-district)
+on every build rather than copied into this repository. Council members change
+with elections, and a hardcoded address keeps working long after it has become
+wrong — quietly sending constituent mail to someone who no longer holds the
+seat. Reading the city's own directory means the map is as current as the city
+is.
+
+Nothing is sent automatically: the draft opens in your mail app for you to read
+and edit. If the district layer is unavailable at build time, or a street falls
+outside the district boundaries (19 of 14,169 do), the map says so and links to
+the council's contact page instead of guessing.
+
 ## Where the gaps are
 
 `make build` ranks every high-stress segment whose two ends sit on *different*

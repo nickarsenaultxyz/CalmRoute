@@ -161,6 +161,7 @@ def _feature(row, decimals: int) -> dict:
         ("mi", "mi", float), ("u", "u", int), ("v", "v", int),
         ("sp", "speed_mph", int), ("ad", "aadt", int), ("ln", "lanes", int),
         ("rc", "rdclass", int), ("basis", "basis", int), ("cf", "cf", int),
+        ("cd", "council", int),
     ]:
         val = row.get(col)
         if val is None or (isinstance(val, float) and np.isnan(val)) or pd.isna(val):

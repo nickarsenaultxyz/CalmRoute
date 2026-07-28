@@ -284,6 +284,27 @@ barrier_min_island_segments = 3
 
 
 # ---------------------------------------------------------------------------
+#  Council districts
+# ---------------------------------------------------------------------------
+#
+#  Read from LFUCG's published layer on every build rather than copied into
+#  this repository. Council members change with elections, and a hardcoded
+#  address would keep working long after it had become wrong -- quietly sending
+#  constituent mail to someone who no longer holds the seat.
+#
+#  The layer carries DISTRICT, REP, EMAIL, TELEPHONE and URL for all 12 seats.
+#  A failed fetch degrades: segments carry no district and the map falls back
+#  to the council's general contact page.
+
+[council]
+source_url = "https://opendata.arcgis.com/datasets/5bab826b97c84d229f7abf0bc947981c_0.geojson"
+fetch_timeout_s = 45
+# Shown when no district could be determined, or the roster is unavailable.
+fallback_url = "https://www.lexingtonky.gov/council-members"
+fallback_label = "Find your council member"
+
+
+# ---------------------------------------------------------------------------
 #  Export / frontend data contract
 # ---------------------------------------------------------------------------
 [export]
@@ -302,6 +323,7 @@ simplify_residential = 0.00003
 "residential.geojson" = 420    # quiet streets, deferred to idle or z>=13
 "graph.json" = 200
 "planned.geojson" = 20
+"council.json" = 6
 "islands.json" = 30
 "gaps.json" = 60
 "stats.json" = 8

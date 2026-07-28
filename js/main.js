@@ -1,9 +1,9 @@
 /** Application entry point. */
 
-import { LTS_ORDER_LEGEND } from './config.js';
+import { LTS, LTS_ORDER_LEGEND } from './config.js';
 import {
-  deferResidential, loadContext, loadManifest, loadMethodology, loadNetwork,
-  loadStats,
+  deferResidential, loadContext, loadCouncil, loadManifest, loadMethodology,
+  loadNetwork, loadStats,
 } from './data.js';
 import {
   addLayers, addSources, hitLayers, setLtsVisible, setSourceVisible,
@@ -140,14 +140,19 @@ function showShare({ push = true } = {}) {
   const seg = app.state.selected != null
     ? app.featuresById.get(app.state.selected)?.properties
     : null;
-  const segment = seg
-    ? { nm: seg.nm, ratingLabel: detailRatingWord(seg.lts) }
-    : null;
+  const segment = seg ? {
+    nm: seg.nm,
+    rating: LTS[seg.lts]?.short || detailRatingWord(seg.lts),
+    detail: LTS[seg.lts]?.detail || '',
+    district: seg.cd ?? null,
+  } : null;
+
+  const ctx = { stats: app.stats, segment, council: app.council, announce };
   const body = app.panel.show({
-    title: 'Share this map',
-    html: share.render(app.stats, { segment }),
+    title: segment ? 'Share or write about this street' : 'Share this map',
+    html: share.render(app.stats, ctx),
   });
-  share.mount(body, { stats: app.stats, segment, announce });
+  share.mount(body, ctx);
   app.panel.focusBody();
   write(app.state, { push });
 }
@@ -179,7 +184,9 @@ function showDetail(feature, { push = true } = {}) {
 
   const body = app.panel.show({
     title: props.nm || 'Unnamed street',
-    html: detail.render(props, { stats: app.stats, aadtYear: app.aadtYear }),
+    html: detail.render(props, {
+      stats: app.stats, aadtYear: app.aadtYear, council: app.council,
+    }),
   });
   body.querySelectorAll('[data-nav]').forEach((btn) => {
     btn.addEventListener('click', () => openView(btn.dataset.nav, { push: true }));
@@ -312,6 +319,11 @@ async function boot() {
   loadMethodology(manifest)
     .then((m) => { app.methodology = m; })
     .catch(() => {});
+
+  // Council roster: small, and needed the moment someone opens the share view.
+  loadCouncil(manifest)
+    .then((c) => { app.council = c; })
+    .catch((err) => console.warn('council roster unavailable', err));
 
   map.on('load', async () => {
     addSources(map, manifest);

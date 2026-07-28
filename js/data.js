@@ -38,6 +38,7 @@ export const loadIslands = (m) => getJSON(m._url('islands'));
 export const loadGaps = (m) => getJSON(m._url('gaps'));
 export const loadGraph = (m) => getJSON(m._url('graph'));
 export const loadPlanned = (m) => getJSON(m._url('planned'));
+export const loadCouncil = (m) => getJSON(m._url('council'));
 
 /**
  * Fetch the residential layer at most once.

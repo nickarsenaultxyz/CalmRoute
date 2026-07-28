@@ -6,3 +6,4 @@ __pycache__/
 # committing them is what grew this repository to ~70 MB.
 data/
 .pytest_cache/
+.cache/
