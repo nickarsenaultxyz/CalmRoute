@@ -149,7 +149,7 @@ function showShare({ push = true } = {}) {
 
   const ctx = { stats: app.stats, segment, council: app.council, announce };
   const body = app.panel.show({
-    title: segment ? 'Share or write about this street' : 'Share this map',
+    title: segment ? 'Share this street' : 'Share this map',
     html: share.render(app.stats, ctx),
   });
   share.mount(body, ctx);

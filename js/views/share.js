@@ -1,17 +1,18 @@
 /**
- * Sharing, and writing to the council member who represents a street.
+ * Sharing, and reaching the council member who represents a street.
  *
  * A bare "copy link" is not much use for advocacy. What travels is the *claim*,
- * so every share composes the statistic alongside the URL — a pasted link
- * carries its own argument rather than relying on the recipient to click, wait
- * for a map to load, and work out what they are looking at.
+ * so sharing composes the statistic alongside the URL — a pasted link carries
+ * its own argument rather than relying on the recipient to click, wait for a
+ * map to load, and work out what they are looking at.
  *
- * The email is addressed by district. Which council member represents a street
- * depends on where the street is, so a single generic address would send most
- * messages to the wrong person. The roster comes from LFUCG's own published
- * directory, refreshed on every build.
+ * The email, by contrast, is deliberately empty. The map's job is to work out
+ * *who* represents this street, which is the part a person cannot easily do
+ * themselves; what to say is theirs. A prefilled message would also arrive as
+ * an obvious form letter, which is exactly the kind of mail that gets counted
+ * and discarded rather than read.
  *
- * All text is generated from the live build, never hardcoded, so it cannot
+ * All text here is generated from the live build, never hardcoded, so it cannot
  * drift from what the map currently says.
  */
 
@@ -38,56 +39,34 @@ function member(council, segment) {
   return rec ? { district: d, ...rec } : null;
 }
 
-function emailBody(stats, segment, rep) {
-  const lines = [];
-  lines.push(rep?.name ? `Dear Council Member ${rep.name.split(',')[0]},` : 'Dear Council Member,');
-  lines.push('');
-  if (segment?.nm) {
-    lines.push(`I am writing about ${segment.nm}${
-      rep ? `, which is in District ${rep.district}` : ''}.`);
-    lines.push('');
-    lines.push(`It is currently rated "${segment.rating}" for cycling`
-      + `${segment.detail ? ` — ${segment.detail.toLowerCase()}` : ''}.`);
-  } else {
-    lines.push('I am writing about cycling conditions in Lexington.');
-  }
-  lines.push('');
-  if (stats?.low_stress) {
-    const low = stats.low_stress;
-    lines.push(
-      `Citywide, ${low.miles.toLocaleString('en-US')} miles of our streets are `
-      + `comfortable for an ordinary adult to bike on, but they are split into `
-      + `${low.islands.toLocaleString('en-US')} disconnected islands — the largest `
-      + `holds only ${low.largest_island_share_pct}% of them. The quiet streets `
-      + `exist; they simply do not connect.`);
-    lines.push('');
-  }
-  lines.push('You can see the details on this map:');
-  lines.push(location.href);
-  lines.push('');
-  lines.push('I would like to see this addressed.');
-  lines.push('');
-  lines.push('Thank you,');
-  return lines.join('\n');
-}
-
 export function render(stats, { segment, council } = {}) {
   const text = claim(stats, { segment });
   const rep = member(council, segment);
   const fallback = council?.fallback;
+  const firstName = (rep?.name || '').split(',')[0].trim();
 
-  const emailBlock = rep?.email
+  const contact = rep?.email
     ? `<div class="rep">
          <b>District ${rep.district} — ${escapeHtml(rep.name || 'your council member')}</b>
-         <span>${escapeHtml(rep.email)}</span>
+         <a href="mailto:${escapeHtml(rep.email)}">${escapeHtml(rep.email)}</a>
+         ${rep.phone ? `<span>${escapeHtml(rep.phone)}</span>` : ''}
        </div>
-       <p class="tech">${segment?.nm ? `${escapeHtml(segment.nm)} is in this district.` : ''}
-         The message is drafted for you; nothing is sent until you press send in
-         your mail app.</p>`
+       ${segment?.nm
+         ? `<p class="tech">${escapeHtml(segment.nm)} is in this district.</p>` : ''}
+       <div class="share-actions">
+         <button class="btn primary" data-share="email">
+           Email ${escapeHtml(firstName || 'them')}
+         </button>
+         ${rep.url ? `<a class="btn" href="${escapeHtml(rep.url)}" target="_blank"
+            rel="noopener">Their council page</a>` : ''}
+       </div>
+       <p class="tech">Opens a blank message to ${escapeHtml(firstName || 'them')} in
+         your mail app. What you write is up to you — a note in your own words
+         carries more weight than a form letter.</p>`
     : `<p class="tech">${segment
-        ? 'This street is outside the council district boundaries, so no representative could be matched.'
-        : 'Select a street first and the message will be addressed to the council member who represents it.'}
-       ${fallback ? `<a href="${escapeHtml(fallback.url)}" target="_blank"
+        ? 'This street falls outside the council district boundaries, so no representative could be matched.'
+        : 'Select a street and this will show the council member who represents it.'}
+       ${fallback ? ` <a href="${escapeHtml(fallback.url)}" target="_blank"
           rel="noopener">${escapeHtml(fallback.label)}</a>.` : ''}</p>`;
 
   return `
@@ -99,18 +78,10 @@ export function render(stats, { segment, council } = {}) {
       <button class="btn primary" data-share="native">Share…</button>
       <button class="btn" data-share="copy">Copy link &amp; text</button>
     </div>
-
-    <h2 class="section">Write to your council member</h2>
-    ${emailBlock}
-    <div class="share-actions">
-      <button class="btn${rep?.email ? ' primary' : ''}" data-share="email"
-        ${rep?.email ? '' : 'aria-describedby="no-rep"'}>
-        ${rep?.email ? `Email ${escapeHtml((rep.name || '').split(',')[0] || 'them')}`
-                     : 'Draft the email'}
-      </button>
-      <button class="btn" data-share="copy-email">Copy the message</button>
-    </div>
     <p class="tech" id="share-status" role="status"></p>
+
+    <h2 class="section">Your council member</h2>
+    ${contact}
 
     <p class="tech">
       Council contacts come from
@@ -124,10 +95,6 @@ export function mount(root, { stats, segment, council, announce } = {}) {
   const url = location.href;
   const text = claim(stats, { segment });
   const rep = member(council, segment);
-  const body = emailBody(stats, segment, rep);
-  const subject = segment?.nm
-    ? `Cycling conditions on ${segment.nm}`
-    : 'Bike network connectivity in Lexington';
   const status = root.querySelector('#share-status');
 
   const say = (msg) => {
@@ -152,20 +119,12 @@ export function mount(root, { stats, segment, council, announce } = {}) {
   root.querySelector('[data-share="copy"]')
     ?.addEventListener('click', () => copy(`${text}\n\n${url}`, say));
 
-  root.querySelector('[data-share="copy-email"]')
-    ?.addEventListener('click', () => copy(
-      `${rep?.email ? `To: ${rep.email}\n` : ''}Subject: ${subject}\n\n${body}`, say));
-
   root.querySelector('[data-share="email"]')?.addEventListener('click', () => {
-    // mailto only. The draft opens in the sender's own mail app so they can
-    // read and edit it -- sending on someone's behalf would be presumptuous,
-    // and there is no server here to send from.
-    const to = rep?.email ? encodeURIComponent(rep.email) : '';
-    location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}`
-      + `&body=${encodeURIComponent(body)}`;
-    say(rep?.name
-      ? `Opening a draft to ${rep.name}. Nothing is sent until you press send.`
-      : 'Opening a draft. Add a recipient before sending.');
+    if (!rep?.email) return;
+    // Recipient only: no subject, no body. Working out who represents this
+    // street is the part the map can do; the message is the sender's.
+    location.href = `mailto:${encodeURIComponent(rep.email)}`;
+    announce?.(`Opening a new message to ${rep.name || 'your council member'}.`);
   });
 }
 

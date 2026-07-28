@@ -210,7 +210,11 @@ html, body {
   background: var(--bg); border-radius: 8px;
 }
 .rep b { display: block; font-size: 14px; }
-.rep span { display: block; font-size: 13px; color: var(--ink-soft); }
+.rep a, .rep span { display: block; font-size: 13px; color: var(--ink-soft); }
+.rep a { color: var(--accent); }
+
+/* An <a> styled as .btn needs the same box as a real button. */
+a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 
 /* ------------------------------------------------------------------ browse */
 
