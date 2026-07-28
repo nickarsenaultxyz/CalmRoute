@@ -31,8 +31,13 @@ export function addSources(map, manifest) {
     map.addSource(src, {
       type: 'geojson',
       data: { type: 'FeatureCollection', features: [] },
-      // Required for feature-state hover/selection to key off our own ids.
-      promoteId: 'id',
+      // Deliberately NO `promoteId`. It promotes `properties.id`, and the
+      // exporter writes `id` at the GeoJSON top level (which is where the spec
+      // puts a feature id). Setting promoteId:'id' therefore looked up a
+      // property that does not exist, leaving every feature with an undefined
+      // id -- so feature-state hover/selection silently did nothing and `?sel=`
+      // deep links never recorded anything. MapLibre already honours a
+      // top-level numeric id for GeoJSON sources.
       // A wider tile buffer stops 5px lines seaming at tile edges.
       buffer: 64,
       tolerance: 0.375,

@@ -21,7 +21,9 @@ const els = {
   hover: document.getElementById('hover-card'),
 };
 
-const app = {
+/** Exposed for debugging and automated checks. Read-only in spirit — nothing in
+ *  the app reads it back. */
+const app = window.__lexbike = {
   state: read(),
   stats: null,
   methodology: null,

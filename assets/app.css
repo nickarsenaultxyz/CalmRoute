@@ -27,6 +27,12 @@
 
 * { box-sizing: border-box; }
 
+/* Any explicit `display` beats the UA stylesheet's `[hidden] { display: none }`,
+   so `el.hidden = true` silently does nothing on a styled element. This bit the
+   panel back button, which stayed visible on the root view. Global so it cannot
+   recur. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   height: 100%;

@@ -255,6 +255,17 @@ def write_artifacts(
         "aadt_measured_pct": round(
             100 * float((edges["aadt_src"] == io.AADT_STATION).mean()), 1),
     })
+    # Per-layer totals, so the legend can label the residential toggle with a
+    # real figure instead of deriving one in JavaScript and risking drift.
+    metres = io.to_working_crs(edges, params).geometry.length
+    stats["layers"] = {
+        name: {
+            "features": len(frame),
+            "miles": round(float(metres[frame.index].sum()) / 1609.344, 1),
+        }
+        for name, frame in
+        (("network", network), ("context", context), ("residential", residential))
+    }
     stats["planned_projects"] = len(planned.get("projects", []))
     export.write_json(stats, out_dir / "stats.json")
     export.write_json(export.build_methodology(params), out_dir / "methodology.json")

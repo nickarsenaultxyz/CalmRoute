@@ -11,7 +11,7 @@
  * technical value and a methodology link are both still present.
  */
 
-import { CONFIDENCE, FAC_PUBLIC, KIND_PUBLIC, LTS } from '../config.js';
+import { BASIS_MEASURED, CONFIDENCE, FAC_PUBLIC, KIND_PUBLIC, LTS } from '../config.js';
 import { escapeHtml, miles, speed, traffic } from '../lib/format.js';
 
 const BASIS_NOTE = {
@@ -49,7 +49,10 @@ export function render(props, { stats, aadtYear } = {}) {
 
     <table class="facts">
       ${fact('Posted speed', speed(props.sp), 'Not on record')}
-      ${fact('Traffic', traffic(props.ad, aadtYear), 'Not available')}
+      ${fact('Traffic', traffic(props.ad, {
+        year: aadtYear,
+        measured: props.basis === BASIS_MEASURED,
+      }), 'Not available')}
       ${fact('Length', miles(props.mi), '—')}
       ${props.isl != null
         ? fact('Low-stress island', `#${props.isl}`, '—')

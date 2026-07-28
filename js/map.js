@@ -28,10 +28,29 @@ function baseStyle(key) {
   };
 }
 
-/** MapLibre 5 requires WebGL2. Fail with an explanation rather than a white
- *  screen, and point at the raw data, which is open anyway. */
+/**
+ * MapLibre 5 requires WebGL2. Fail with an explanation rather than a white
+ * screen, and point at the raw data, which is open anyway.
+ *
+ * Do NOT use `maplibregl.supported()` here. That helper existed in v2/v3 and
+ * was REMOVED by v5 — `typeof maplibregl.supported` is `undefined`, so the
+ * obvious-looking guard `maplibregl.supported && maplibregl.supported()` is
+ * always falsy and every visitor gets the fallback on a perfectly capable
+ * browser. Verified against 5.24.0 in headless Chrome. Test the actual
+ * capability instead.
+ */
+function hasWebGL2() {
+  try {
+    const canvas = document.createElement('canvas');
+    return !!(canvas.getContext('webgl2')
+      || canvas.getContext('experimental-webgl2'));
+  } catch {
+    return false;
+  }
+}
+
 export function checkSupport() {
-  if (window.maplibregl && maplibregl.supported && maplibregl.supported()) return true;
+  if (window.maplibregl && hasWebGL2()) return true;
   document.getElementById('map').innerHTML = `
     <div class="fallback">
       <h1>This map needs WebGL2</h1>

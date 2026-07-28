@@ -119,6 +119,12 @@ export const KIND_PUBLIC = {
   2: 'Connection to a path',
 };
 
+/** `basis` codes, mirroring lexbike/export.py. Only BASIS_MEASURED means the
+ *  traffic figure came from a real KYTC count rather than a class median. */
+export const BASIS_TYPE_ONLY = 0;
+export const BASIS_ESTIMATED = 1;
+export const BASIS_MEASURED = 2;
+
 export const CONFIDENCE = {
   0: { label: 'Low', note: 'This rating changes if reasonable assumptions change.' },
   1: { label: 'Medium', note: 'Traffic volume is estimated from similar streets.' },

@@ -14,6 +14,9 @@ import { escapeHtml } from '../lib/format.js';
 export function render(stats, state) {
   const milesByLts = new Map((stats?.by_lts || []).map((r) => [r.lts, r.miles]));
   const low = stats?.low_stress;
+  const residentialMiles = stats?.layers?.residential?.miles != null
+    ? Math.round(stats.layers.residential.miles)
+    : null;
 
   const rows = LTS_ORDER_LEGEND.map((lts) => {
     const s = LTS[lts];
@@ -47,9 +50,13 @@ export function render(stats, state) {
     </div>
     <button class="legend-row" role="switch" aria-checked="${state.residential}"
             data-toggle="residential">
-      <span class="swatch" aria-hidden="true"></span>
+      <svg class="swatch" viewBox="0 0 34 12" aria-hidden="true">
+        <line x1="1" y1="3.5" x2="33" y2="3.5" stroke="${LTS[1].color}" stroke-width="2.5"/>
+        <line x1="1" y1="8.5" x2="33" y2="8.5" stroke="${LTS[2].color}" stroke-width="2.5"/>
+      </svg>
       <span class="label"><b>Neighbourhood streets</b>
       <span>The quiet-street bulk of the network</span></span>
+      <span class="miles">${residentialMiles != null ? `${residentialMiles} mi` : ''}</span>
     </button>
     <p class="note">${EXISTING_ONLY_NOTE}</p>
     <p class="tech">Tap any street for its rating and the data behind it.</p>`;
