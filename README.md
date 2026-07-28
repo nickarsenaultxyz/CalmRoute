@@ -141,14 +141,18 @@ physical treatment, which earns no rating credit.
 
 Written to `data/` (gitignored — regenerate with `make build`):
 
+Three of these are map layers, split by the role each plays in answering "can I
+ride here" — which is also the order they are needed in:
+
 | File | Gzipped | Purpose |
 |---|--:|---|
-| `network.geojson` | 246 KB | facilities, trails, busy roads — the critical path |
-| `residential.geojson` | 358 KB | quiet-street bulk, loaded after first paint |
-| `graph.json` | 196 KB | 10,842 nodes for client-side routing |
-| `gaps.json` | 11 KB | 316 ranked barrier crossings |
-| `islands.json` | 5 KB | connected low-stress components |
-| `stats.json`, `methodology.json`, `manifest.json`, `planned.geojson` | < 4 KB | |
+| `network.geojson` | 55 KB | built bike facilities and trails — the only thing on the critical path |
+| `context.geojson` | 157 KB | busy and prohibited roads, fetched right after |
+| `residential.geojson` | 352 KB | quiet streets, fetched only when switched on |
+| `graph.json` | 195 KB | 10,842 nodes, for client-side routing |
+| `gaps.json` / `gaps.geojson` | 24 KB | 316 ranked barrier crossings |
+| `islands.json` | 4 KB | connected low-stress components |
+| `stats.json`, `methodology.json`, `manifest.json`, `planned.geojson`, `council.json` | < 2 KB each | |
 
 ## Using it without a mouse
 
@@ -183,6 +187,29 @@ A bare link is not much use for advocacy, so every share composes the
 The link restores exactly what you were looking at: location, zoom, which
 ratings are shown, and any selected street. The text is generated from the live
 build, so it cannot drift from what the map currently says.
+
+### Contacting a council member
+
+Select a street and the map shows **the council member who actually represents
+it**, with a one-tap email link. Which member that is depends on where the
+street is, so a single generic address would send most messages to the wrong
+person — working that out is the part the map can usefully do.
+
+The message itself is left blank on purpose. What to say is yours, and a note
+in a constituent's own words carries more weight than an obvious form letter.
+
+The roster is read from
+[LFUCG's published council district layer](https://data.lexingtonky.gov/datasets/lfucg::council-district)
+on every build rather than copied into this repository. Council members change
+with elections, and a hardcoded address keeps working long after it has become
+wrong — quietly sending constituent mail to someone who no longer holds the
+seat. Reading the city's own directory means the map is as current as the city
+is.
+
+Nothing is sent automatically — it opens a new message in your mail app. If the
+district layer is unavailable at build time, or a street falls outside the
+district boundaries (19 of 14,169 do), the map says so and links to the
+council's contact page rather than guessing.
 
 ## Where the gaps are
 

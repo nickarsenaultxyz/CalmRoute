@@ -21,7 +21,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 
-from . import conflate, export, io, network
+from . import conflate, council, export, io, network
 from . import lts as lts_mod
 from .params import Params
 
@@ -153,10 +153,15 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
     flipped = export.load_flipped_ids(Path('data/_sensitivity/flipped_ids.json'))
     edges = export.add_provenance(edges, params, flipped)
 
+    # Which council member represents a street depends on where it is, so the
+    # district is resolved per segment rather than left to the reader.
+    districts = council.fetch(params)
+    edges = council.attach(edges, districts, params)
+
     log.info("--- stage 5/5: write artifacts ---")
     stats = write_artifacts(
         edges, islands, barriers, node_ids, funded, streets, params, out_dir,
-        skip_size_check=skip_size_check,
+        skip_size_check=skip_size_check, council_roster=council.roster(districts),
     )
     log.info("wrote %d artifacts to %s/", len(list(out_dir.glob('*'))), out_dir)
     return stats
@@ -164,7 +169,7 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
 
 def write_artifacts(
     edges, islands, barriers, node_ids, funded, streets, params: Params,
-    out_dir: Path, *, skip_size_check: bool = False,
+    out_dir: Path, *, skip_size_check: bool = False, council_roster: dict | None = None,
 ) -> dict:
     """Write every file the frontend fetches."""
     rules = lts_mod.Ruleset.from_params(params)
@@ -246,6 +251,20 @@ def write_artifacts(
             out_dir / "gaps.json",
         )
 
+    export.write_json(
+        {
+            "districts": council_roster or {},
+            "fallback": {
+                "url": params["council.fallback_url"],
+                "label": params["council.fallback_label"],
+            },
+            # Republished from the city's own layer on every build; see
+            # lexbike/council.py for why it is not stored in the repository.
+            "source": params["council.source_url"],
+        },
+        out_dir / "council.json",
+    )
+
     planned = build_planned(funded, streets, edges, params)
     export.write_json(planned, out_dir / "planned.geojson")
 
@@ -300,6 +319,7 @@ def write_artifacts(
                 "gaps": "gaps.json",
                 "gapsGeometry": "gaps.geojson",
                 "planned": "planned.geojson",
+                "council": "council.json",
                 "stats": "stats.json",
                 "methodology": "methodology.json",
             },
