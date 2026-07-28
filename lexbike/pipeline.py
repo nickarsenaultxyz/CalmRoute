@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import io
+from . import conflate, io
 from . import lts as lts_mod
 from .params import Params
 
@@ -117,17 +117,25 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
 
     streets = io.attach_aadt(streets, aadt_by_station, params)
 
-    # Stage 2 (conflation) is not wired yet, so every segment is currently rated
-    # as mixed traffic. That is the correct no-facility baseline and lets the
-    # classifier be checked against all 13,775 real segments before conflation
-    # lands; facilities can only lower these ratings, never raise them.
-    log.info("--- stage 3/5: classify (no-facility baseline) ---")
+    log.info("--- stage 2/5: conflate facilities onto centrelines ---")
+    # Ratings must reflect what is built, so planned/funded projects are excluded
+    # here and carried separately for the scenario feature. The old pipeline
+    # conflated the two and inflated its ratings with unbuilt infrastructure.
+    existing = facilities[facilities["status"] == params["scenario.existing_status"]]
+    funded = facilities[facilities["status"] == params["scenario.funded_status"]]
+    log.info("rating against %d existing facilities (%d funded held back)",
+             len(existing), len(funded))
+
+    streets = conflate.conflate_on_road(streets, existing, params)
+    paths, connectors = conflate.build_off_road(streets, existing, params)
+
+    log.info("--- stage 3/5: classify ---")
     rated = classify(streets, params)
     summarize(rated, params)
 
     raise NotImplementedError(
-        "stage 2 (conflation) — see task #3. Sources load, AADT resolves, and the "
-        "classifier runs over the full network."
+        "stage 4 (network/islands) — see task #4. Conflation and classification "
+        f"are complete: {len(paths)} off-road paths, {len(connectors)} connectors."
     )
 
 

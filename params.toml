@@ -239,15 +239,27 @@ lts = 1                     # short, visible, dashed; see [conflation].connector
 
 [conflation]
 buffer_m = 12.0
-min_coverage = 0.55            # tune against the mileage gate below
+min_coverage = 0.55            # share of a centreline that must be covered
 bearing_tolerance_deg = 30.0
 exclude_rdclass = [1, 2]       # never conflate a facility onto an interstate
 
-# Build fails if conflated on-road mileage strays from the source. Measured
-# during exploration: coverage 0.50 gave -32%, a global buffer union at 0.60
-# gave +13% and wrongly captured 10 interstate segments.
-source_on_road_miles = 222.5
-mileage_tolerance = 0.10
+# A category must contribute this share of the *covered* length to be eligible
+# to label the block. Without it, a buffer that merely clips the end of a block
+# (contributing ~0 m) decides that block's rating.
+min_category_share = 0.30
+
+# Quality gate. Deliberately NOT "conflated miles must equal source miles":
+# facility segments have a median length of 626 m against 118 m centrelines, so
+# a facility is credited to whole blocks and legitimately yields more
+# block-mileage than facility-mileage. Demanding equality would force the
+# thresholds to throw away real facilities.
+#
+#   recall     fraction of treated facility length lying within the buffer of a
+#              credited centreline. Low means we dropped facilities.
+#   inflation  credited centreline miles / treated facility miles. High means we
+#              credited whole arterials off incidental contact.
+min_recall = 0.90
+max_inflation = 1.45
 
 connector_max_m = 25.0         # 162 of 254 off-road endpoints connect at 25 m
 

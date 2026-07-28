@@ -139,6 +139,13 @@ def load_bike_facilities(params: Params, path: Path = BIKE_PATH) -> gpd.GeoDataF
         )
     gdf["fac"] = raw.map(mapping).fillna("none")
 
+    # Source-layer id, used to record which facility credited a centreline so a
+    # rating can be traced back to the record that justified it.
+    if "OBJECTID" in gdf.columns and gdf["OBJECTID"].is_unique:
+        gdf["id_src"] = pd.to_numeric(gdf["OBJECTID"], errors="coerce").astype("int64")
+    else:
+        gdf["id_src"] = pd.RangeIndex(len(gdf)).astype("int64")
+
     gdf["status"] = _norm_text(gdf["Status"])
     gdf["on_road"] = _norm_text(gdf["Type_Road"]).eq("On Road")
     gdf["recommended"] = _norm_text(gdf.get("AltType_Facility"))
