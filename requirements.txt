@@ -1,22 +1,21 @@
-# Core data analysis packages
+# Core data analysis
 numpy>=1.24.0
 pandas>=2.0.0
 
-# Geospatial packages
+# Geospatial
 geopandas>=0.14.0
 pyogrio>=0.7.0
 shapely>=2.0.0
-osmnx>=1.9.0
-rasterio>=1.3.0
-rio-vrt>=0.3.0
 
 # Network analysis
 networkx>=3.0
 
-# Visualization
-folium>=0.15.0
-matplotlib>=3.7.0
+# Testing
+pytest>=8.0.0
 
-# Optional utilities
-python-dateutil>=2.8.0
-requests>=2.27.0
+# Params are read with stdlib tomllib (Python 3.11+); no TOML dependency needed.
+#
+# Removed deliberately — none of these were ever imported by the pipeline:
+#   osmnx, rasterio, rio-vrt   leftovers from an abandoned OSM/elevation approach
+#   matplotlib, requests, python-dateutil
+#   folium                     the map is now a hand-written MapLibre page

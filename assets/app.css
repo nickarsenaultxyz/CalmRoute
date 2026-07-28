@@ -1,0 +1,276 @@
+/* Lexington Bike Stress — application styles.
+   Mobile-first: the bottom sheet is the default, the side panel is the
+   override above 720px. */
+
+:root {
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --ink: #16181d;
+  --ink-soft: #5b6270;
+  --ink-faint: #868d9a;
+  --line: #e3e5ea;
+  --accent: #1d4ed8;
+  --focus: #1d4ed8;
+
+  --lts0: #9ca3af;
+  --lts1: #00875a;
+  --lts2: #2563eb;
+  --lts3: #d97706;
+  --lts4: #dc2626;
+  --planned: #7c3aed;
+
+  --panel-w: 380px;
+  --radius: 12px;
+  --shadow: 0 2px 16px rgba(16, 20, 30, 0.14);
+  --sheet-peek: 84px;
+}
+
+* { box-sizing: border-box; }
+
+/* Any explicit `display` beats the UA stylesheet's `[hidden] { display: none }`,
+   so `el.hidden = true` silently does nothing on a styled element. This bit the
+   panel back button, which stayed visible on the root view. Global so it cannot
+   recur. */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+#map { position: absolute; inset: 0; }
+
+/* MapLibre's own focus ring is invisible against a light basemap. */
+#map:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip: rect(0 0 0 0); clip-path: inset(50%); overflow: hidden;
+}
+
+.skip-link {
+  position: absolute; top: -100px; left: 8px; z-index: 60;
+  background: var(--surface); color: var(--ink);
+  padding: 10px 14px; border-radius: 8px; box-shadow: var(--shadow);
+  text-decoration: none; font-weight: 600;
+}
+.skip-link:focus { top: 8px; }
+
+/* ---------------------------------------------------------------- loading */
+
+.loading {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 30; display: flex; gap: 9px; align-items: center;
+  background: var(--surface); color: var(--ink-soft);
+  padding: 8px 14px; border-radius: 999px; box-shadow: var(--shadow);
+  font-size: 13px; transition: opacity .25s;
+}
+.loading[hidden] { display: none; }
+.loading.fade { opacity: 0; pointer-events: none; }
+
+.spinner {
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: var(--accent);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ------------------------------------------------------------------ panel */
+
+#panel {
+  position: absolute; z-index: 40;
+  background: var(--surface);
+  display: flex; flex-direction: column;
+  box-shadow: var(--shadow);
+
+  /* mobile: bottom sheet */
+  left: 0; right: 0; bottom: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  max-height: 92vh;
+  padding-bottom: env(safe-area-inset-bottom);
+  transition: height .22s ease;
+}
+
+#panel[data-snap="peek"] { height: var(--sheet-peek); }
+#panel[data-snap="half"] { height: 55vh; }
+#panel[data-snap="full"] { height: 92vh; }
+
+.sheet-handle {
+  display: block; width: 44px; height: 22px; margin: 4px auto 0;
+  padding: 0; border: 0; background: transparent; cursor: grab;
+  /* Only the handle claims the gesture; the map keeps its own. */
+  touch-action: none;
+}
+.sheet-handle::before {
+  content: ""; display: block; width: 40px; height: 4px; margin: 9px auto;
+  border-radius: 999px; background: var(--line);
+}
+
+.panel-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 2px 14px 8px;
+  flex: 0 0 auto;
+}
+.panel-head h1 {
+  margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -0.01em;
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.icon-btn {
+  flex: 0 0 auto;
+  min-width: 44px; min-height: 44px;      /* WCAG target size */
+  display: grid; place-items: center;
+  border: 0; background: transparent; color: var(--ink-soft);
+  font-size: 20px; line-height: 1; cursor: pointer; border-radius: 8px;
+}
+.icon-btn:hover { background: var(--bg); color: var(--ink); }
+
+.panel-body {
+  flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain;
+  padding: 0 14px 18px;
+}
+.panel-body:focus { outline: none; }
+
+@media (min-width: 720px) {
+  #panel {
+    top: 12px; bottom: 12px; left: 12px; right: auto;
+    width: var(--panel-w);
+    border-radius: var(--radius);
+    max-height: none; height: auto !important;
+  }
+  .sheet-handle { display: none; }
+  .panel-head { padding-top: 12px; }
+}
+
+/* ----------------------------------------------------------- legend/filter */
+
+.legend { margin: 0 0 14px; }
+
+.legend-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  min-height: 44px; padding: 6px 8px; margin: 0 0 1px;
+  border: 0; border-radius: 8px; background: transparent;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.legend-row:hover { background: var(--bg); }
+.legend-row[aria-checked="false"] { opacity: .42; }
+
+.legend-row .swatch { flex: 0 0 auto; width: 34px; height: 12px; }
+.legend-row .label { flex: 1 1 auto; min-width: 0; }
+.legend-row .label b { display: block; font-weight: 600; font-size: 14px; }
+.legend-row .label span { display: block; font-size: 12px; color: var(--ink-faint); }
+.legend-row .miles {
+  flex: 0 0 auto; font-variant-numeric: tabular-nums;
+  font-size: 12px; color: var(--ink-faint); text-align: right;
+}
+.legend-row .miles em { font-style: normal; opacity: .65; }
+
+.note {
+  margin: 12px 0 0; padding: 10px 12px;
+  background: var(--bg); border-radius: 8px;
+  font-size: 12.5px; color: var(--ink-soft); line-height: 1.45;
+}
+.note strong { color: var(--ink); }
+
+/* ------------------------------------------------------------ nav / buttons */
+
+.panel-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; }
+
+.btn {
+  min-height: 44px; padding: 8px 14px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--ink);
+  font: inherit; font-size: 13.5px; cursor: pointer;
+}
+.btn:hover { background: var(--bg); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.08); }
+
+.share-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; }
+
+/* ------------------------------------------------------------------ browse */
+
+.field { display: block; margin: 2px 0 10px; }
+.field input {
+  width: 100%; min-height: 44px; padding: 8px 12px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--ink); font: inherit; font-size: 15px;
+}
+
+.browse-list { list-style: none; margin: 0; padding: 0; }
+
+.browse-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  min-height: 44px; padding: 6px 8px;
+  border: 0; border-radius: 8px; background: transparent;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.browse-row:hover { background: var(--bg); }
+.browse-row .dot { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; }
+.browse-row .label { flex: 1 1 auto; min-width: 0; }
+.browse-row .label b { display: block; font-weight: 600; font-size: 14px; }
+.browse-row .label span { display: block; font-size: 12px; color: var(--ink-faint); }
+.browse-row .miles {
+  flex: 0 0 auto; font-size: 12px; color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+.browse-empty { padding: 10px 8px; font-size: 13px; color: var(--ink-faint); }
+
+/* -------------------------------------------------------------- detail view */
+
+.rating { display: flex; gap: 10px; align-items: flex-start; margin: 2px 0 14px; }
+.rating .dot { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 50%; margin-top: 3px; }
+.rating b { display: block; font-size: 16px; }
+.rating span { display: block; font-size: 13px; color: var(--ink-soft); }
+
+.facts { width: 100%; border-collapse: collapse; margin: 0 0 4px; }
+.facts th, .facts td {
+  text-align: left; padding: 7px 0; font-size: 14px;
+  border-bottom: 1px solid var(--line); vertical-align: top;
+}
+.facts th { font-weight: 500; color: var(--ink-soft); width: 46%; }
+.facts td { font-variant-numeric: tabular-nums; }
+.facts td.unknown { color: var(--ink-faint); font-style: italic; }
+
+.tech {
+  margin-top: 14px; font-size: 12px; color: var(--ink-faint);
+}
+
+/* ------------------------------------------------------------- hover card */
+
+.hover-card {
+  position: absolute; z-index: 35; pointer-events: none;
+  background: var(--surface); box-shadow: var(--shadow);
+  border-radius: 8px; padding: 7px 10px; font-size: 13px;
+  max-width: 240px;
+}
+.hover-card b { display: block; font-weight: 600; }
+.hover-card span { color: var(--ink-soft); font-size: 12px; }
+
+/* ---------------------------------------------------------------- fallback */
+
+.fallback { position: relative; z-index: 50; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; }
+.fallback h1 { font-size: 1.4rem; }
+.fallback a { color: var(--accent); }
+
+/* ------------------------------------------------------------- preferences */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}
+
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
