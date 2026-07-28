@@ -40,13 +40,20 @@ export const loadGraph = (m) => getJSON(m._url('graph'));
 export const loadPlanned = (m) => getJSON(m._url('planned'));
 
 /**
- * Fetch the residential layer once, on whichever trigger fires first.
- * Returns a promise so callers can await readiness without re-triggering.
+ * Fetch the residential layer at most once.
+ *
+ * Because it is off by default, this is NOT prefetched — 347 KB gzipped is a
+ * large download to spend on 8,908 features the visitor has not asked to see.
+ * It is fetched the first time the layer is turned on, or on idle if a deep
+ * link arrived with it already enabled.
+ *
+ * Returns `{ ensure }`; calling it repeatedly is safe and returns the same
+ * promise.
  */
-export function deferResidential(map, manifest, { onStart, onDone } = {}) {
+export function deferResidential(map, manifest, { onStart, onDone, eager = false } = {}) {
   let started = null;
 
-  const run = () => {
+  const ensure = () => {
     if (started) return started;
     onStart?.();
     started = getJSON(manifest._url('residential'))
@@ -63,12 +70,10 @@ export function deferResidential(map, manifest, { onStart, onDone } = {}) {
     return started;
   };
 
-  if ('requestIdleCallback' in window) {
-    requestIdleCallback(run, { timeout: 4000 });
-  } else {
-    setTimeout(run, 1200);
+  if (eager) {
+    if ('requestIdleCallback' in window) requestIdleCallback(ensure, { timeout: 4000 });
+    else setTimeout(ensure, 1200);
   }
-  map.on('zoom', () => { if (map.getZoom() >= 13) run(); });
 
-  return { ready: () => run() };
+  return { ensure };
 }

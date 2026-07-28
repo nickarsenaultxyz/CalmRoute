@@ -7,14 +7,22 @@
  * user expects. That distinction is the whole design.
  */
 
-const DEFAULTS = { view: 'legend', basemap: 'light', residential: true };
+/**
+ * Residential streets default OFF.
+ *
+ * They are 8,908 of 14,169 features and they swamp the map: at any zoom the
+ * page reads as a wall of blue, which buries the built bike network — the thing
+ * the map exists to show — and visually contradicts the headline about the
+ * network being fragmented. Off by default, one tap to bring back.
+ */
+const DEFAULTS = { view: 'legend', basemap: 'light', residential: false };
 
 export function read() {
   const p = new URLSearchParams(location.search);
   const state = {
     view: p.get('view') || DEFAULTS.view,
     basemap: p.get('bm') || DEFAULTS.basemap,
-    residential: p.get('res') !== '0',
+    residential: p.has('res') ? p.get('res') === '1' : DEFAULTS.residential,
     selected: p.has('sel') ? Number(p.get('sel')) : null,
     lts: p.has('lts')
       ? new Set(p.get('lts').split(',').map(Number).filter((n) => !Number.isNaN(n)))
@@ -40,7 +48,7 @@ export function write(state, { push = false } = {}) {
   if (state.lts && state.lts.size < 5) {
     p.set('lts', [...state.lts].sort((a, b) => a - b).join(','));
   }
-  if (state.residential === false) p.set('res', '0');
+  if (state.residential !== DEFAULTS.residential) p.set('res', state.residential ? '1' : '0');
   if (state.view && state.view !== DEFAULTS.view) p.set('view', state.view);
   if (state.selected != null) p.set('sel', String(state.selected));
   if (state.basemap && state.basemap !== DEFAULTS.basemap) p.set('bm', state.basemap);

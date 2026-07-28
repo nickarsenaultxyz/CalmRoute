@@ -12,24 +12,42 @@ import { swatchSvg } from '../layers.js';
 import { escapeHtml } from '../lib/format.js';
 
 export function render(stats, state) {
-  const milesByLts = new Map((stats?.by_lts || []).map((r) => [r.lts, r.miles]));
   const low = stats?.low_stress;
-  const residentialMiles = stats?.layers?.residential?.miles != null
-    ? Math.round(stats.layers.residential.miles)
+  const layers = stats?.layers;
+  const residentialMiles = layers?.residential?.miles != null
+    ? Math.round(layers.residential.miles)
     : null;
+
+  // Report the mileage that is actually drawn. Quiet streets are hidden by
+  // default, and 8,908 of them carry most of the low-stress mileage, so the
+  // city-wide totals would badly overstate what is on screen.
+  const shown = (lts) => {
+    if (!layers) return null;
+    const sources = state.residential
+      ? ['network', 'context', 'residential']
+      : ['network', 'context'];
+    const total = sources.reduce(
+      (sum, s) => sum + (layers[s]?.by_lts?.[String(lts)] ?? 0), 0);
+    return total > 0 ? total : null;
+  };
+  const cityTotal = (lts) => (stats?.by_lts || []).find((r) => r.lts === lts)?.miles ?? null;
 
   const rows = LTS_ORDER_LEGEND.map((lts) => {
     const s = LTS[lts];
-    const mi = milesByLts.get(lts);
+    const mi = shown(lts);
+    const all = cityTotal(lts);
+    const hidden = all != null && mi != null && all - mi > 1;
     const on = state.lts.has(lts);
     return `
-      <button class="legend-row" role="switch" aria-checked="${on}" data-lts="${lts}">
+      <button class="legend-row" role="switch" aria-checked="${on}" data-lts="${lts}"
+        ${hidden ? `title="${all.toFixed(0)} mi citywide; the rest is on hidden neighbourhood streets"` : ''}>
         ${swatchSvg(lts)}
         <span class="label">
           <b>${escapeHtml(s.short)}</b>
           <span>${escapeHtml(s.detail)}</span>
         </span>
-        <span class="miles">${mi != null ? `${mi.toFixed(0)} mi` : ''}</span>
+        <span class="miles">${mi != null ? `${mi.toFixed(0)} mi` : '—'}${
+          hidden ? `<em> of ${all.toFixed(0)}</em>` : ''}</span>
       </button>`;
   }).join('');
 
@@ -55,11 +73,17 @@ export function render(stats, state) {
         <line x1="1" y1="8.5" x2="33" y2="8.5" stroke="${LTS[2].color}" stroke-width="2.5"/>
       </svg>
       <span class="label"><b>Neighbourhood streets</b>
-      <span>The quiet-street bulk of the network</span></span>
+      <span>${state.residential
+        ? 'Quiet streets with no bike facility'
+        : 'Hidden — turn on to add quiet streets'}</span></span>
       <span class="miles">${residentialMiles != null ? `${residentialMiles} mi` : ''}</span>
     </button>
     <p class="note">${EXISTING_ONLY_NOTE}</p>
-    <p class="tech">Tap any street for its rating and the data behind it.</p>`;
+    <p class="tech">
+      Tap any street for its rating and the data behind it.
+      Grey streets on the base map are not in Lexington's centreline file —
+      usually private drives and apartment roads — so they carry no rating.
+    </p>`;
 }
 
 /** Wire the switches. `onLts` / `onResidential` receive (value, isOn). */
@@ -76,6 +100,8 @@ export function mount(root, { onLts, onResidential }) {
   res?.addEventListener('click', () => {
     const on = res.getAttribute('aria-checked') !== 'true';
     res.setAttribute('aria-checked', String(on));
+    // The caller re-renders: the per-row mileages describe what is drawn, so
+    // they all change when this layer comes or goes.
     onResidential(on);
   });
 }

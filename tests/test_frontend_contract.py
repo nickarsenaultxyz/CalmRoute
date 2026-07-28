@@ -140,6 +140,26 @@ def test_the_three_layers_partition_the_network(manifest):
     assert len(ids) == len(net) + len(ctx) + len(res), "layers must be disjoint"
 
 
+def test_layer_stats_let_the_legend_report_what_is_drawn(manifest):
+    """Quiet streets are hidden by default and carry most of the low-stress
+    mileage, so a legend row showing the citywide total beside a nearly empty
+    map would be misleading. The legend needs per-layer, per-LTS mileage."""
+    s = load(manifest["files"]["stats"])
+    for name in ("network", "context", "residential"):
+        assert name in s["layers"], f"js/views/legend.js reads stats.layers.{name}"
+        assert s["layers"][name]["by_lts"], f"stats.layers.{name}.by_lts"
+
+    # Per-layer LTS mileage must reconcile with the citywide totals, or the
+    # legend's "20 mi of 701" would not add up.
+    citywide = {r["lts"]: r["miles"] for r in s["by_lts"]}
+    summed = {}
+    for layer in s["layers"].values():
+        for lts, mi in layer["by_lts"].items():
+            summed[int(lts)] = summed.get(int(lts), 0) + mi
+    for lts, total in citywide.items():
+        assert abs(summed.get(lts, 0) - total) < 0.5, f"LTS {lts} mileage disagrees"
+
+
 def test_critical_path_stays_within_budget(manifest):
     """The whole point of the rebuild. Guarded here so a schema change cannot
     quietly reintroduce a multi-megabyte first paint."""

@@ -171,8 +171,9 @@ html, body {
 .legend-row .label span { display: block; font-size: 12px; color: var(--ink-faint); }
 .legend-row .miles {
   flex: 0 0 auto; font-variant-numeric: tabular-nums;
-  font-size: 12px; color: var(--ink-faint);
+  font-size: 12px; color: var(--ink-faint); text-align: right;
 }
+.legend-row .miles em { font-style: normal; opacity: .65; }
 
 .note {
   margin: 12px 0 0; padding: 10px 12px;

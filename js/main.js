@@ -76,7 +76,9 @@ function showLegend({ push = false } = {}) {
     onResidential: (on) => {
       app.state.residential = on;
       setSourceVisible(app.map, 'residential', on);
+      if (on) app.residential?.ensure();
       syncUrl();
+      showLegend();   // mileages describe what is drawn, so they all change
     },
   });
   write(app.state, { push });
@@ -211,7 +213,7 @@ async function boot() {
     for (const lts of LTS_ORDER_LEGEND) {
       if (!app.state.lts.has(lts)) setLtsVisible(map, lts, false);
     }
-    if (!app.state.residential) setSourceVisible(map, 'residential', false);
+    setSourceVisible(map, 'residential', app.state.residential);
 
     installInteraction(map);
 
@@ -239,7 +241,11 @@ async function boot() {
       })
       .catch((err) => { console.error('context layer failed', err); setLoading(null); });
 
-    deferResidential(map, manifest, {
+    // Off by default, so this is not prefetched -- it is fetched the first time
+    // the layer is switched on (or immediately if a deep link arrived with it
+    // already enabled).
+    app.residential = deferResidential(map, manifest, {
+      eager: app.state.residential,
       onStart: () => setLoading('Adding neighbourhood streets…'),
       onDone: (fc) => {
         setLoading(null);
@@ -260,14 +266,33 @@ async function boot() {
   });
 }
 
-/** Re-open a deep-linked segment once its layer has arrived. */
+/**
+ * Re-open a deep-linked segment once its layer has arrived.
+ *
+ * A shared link can point at a quiet street, and quiet streets are no longer
+ * fetched by default. If the id is unknown, pull that layer in once and retry
+ * rather than silently doing nothing — a shared link that opens a blank map is
+ * worse than a slow one.
+ */
 function restoreSelection(push = false) {
   const f = app.featuresById.get(app.state.selected);
-  if (!f) return;
+  if (!f) {
+    if (app.residential && !restoreSelection._retried) {
+      restoreSelection._retried = true;
+      app.residential.ensure().then(() => restoreSelection(push));
+    }
+    return;
+  }
   // Mirrors the export-side split in lexbike/pipeline.py: facilities are in
   // `network`, everything else divides on low-stress vs not.
   const p = f.properties;
   const src = p.fac ? 'network' : (p.lts <= 2 ? 'residential' : 'context');
+  // Reveal the layer the shared segment lives on, or the highlight lands on
+  // something invisible.
+  if (src === 'residential' && !app.state.residential) {
+    app.state.residential = true;
+    setSourceVisible(app.map, 'residential', true);
+  }
   showDetail({ ...f, source: src }, { push });
   if (f.geometry?.coordinates?.length) {
     const c = f.geometry.coordinates[Math.floor(f.geometry.coordinates.length / 2)];
