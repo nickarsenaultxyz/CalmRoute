@@ -68,7 +68,7 @@ export function render(props, { stats, aadtYear, council } = {}) {
 
     <p class="tech">
       LTS ${props.lts} · ${escapeHtml(conf.label)} confidence ·
-      <a href="./data/methodology.json">what do these ratings mean?</a>
+      <button class="linklike" data-nav="methodology">what do these ratings mean?</button>
     </p>`;
 }
 
