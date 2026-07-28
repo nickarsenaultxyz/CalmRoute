@@ -19,7 +19,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import conflate, io
+import geopandas as gpd
+
+from . import conflate, io, network
 from . import lts as lts_mod
 from .params import Params
 
@@ -129,14 +131,92 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
     streets = conflate.conflate_on_road(streets, existing, params)
     paths, connectors = conflate.build_off_road(streets, existing, params)
 
+    # Split centrelines where trail connectors attach, before classification, so
+    # both pieces inherit the parent's speed, volume and facility.
+    streets = network.split_for_connectors(streets, connectors, params)
+
     log.info("--- stage 3/5: classify ---")
     rated = classify(streets, params)
-    summarize(rated, params)
+
+    log.info("--- stage 4/5: graph, islands, barriers ---")
+    edges = assemble_edges(rated, paths, connectors, params)
+    summarize(edges, params)
+
+    graph, node_ids, pairs = network.build_graph(edges, params)
+    edges, islands = network.label_islands(edges, pairs, params)
+    barriers = network.rank_barriers(edges, pairs, islands, params)
 
     raise NotImplementedError(
-        "stage 4 (network/islands) — see task #4. Conflation and classification "
-        f"are complete: {len(paths)} off-road paths, {len(connectors)} connectors."
+        "stage 5 (export) — see task #5. Network complete: "
+        f"{len(edges)} edges, {len(islands)} islands, {len(barriers)} barrier projects."
     )
+
+
+def assemble_edges(streets, paths, connectors, params: Params):
+    """Concatenate the three geometry sources into one network frame.
+
+    Off-road paths and connectors are the only geometry outside the centreline
+    layer. Everything downstream — graph, islands, barriers, export — reads this
+    single frame, so there is one definition of "the network".
+    """
+    rules = lts_mod.Ruleset.from_params(params)
+
+    frames = [streets.assign(kind="street")]
+
+    if len(paths):
+        p = paths.copy()
+        p["kind"] = "facility"
+        # A path is off the traffic stream: no speed, no volume, no road class.
+        p["rdclass"] = 6
+        p["lanes"] = 1
+        p["speed_mph"] = pd.NA
+        p["aadt"] = pd.NA
+        p["aadt_src"] = io.AADT_IMPUTED_COARSE
+        p["road_name"] = p.get("network_name", pd.Series(dtype="string"))
+        p["lts"] = rules.path_lts if "path" in rules.facility_rank else 1
+        p["fac"] = "path"
+        frames.append(p)
+
+    if len(connectors):
+        c = connectors.copy()
+        c["kind"] = "connector"
+        c["rdclass"] = 6
+        c["lanes"] = 1
+        c["speed_mph"] = pd.NA
+        c["aadt"] = pd.NA
+        c["aadt_src"] = io.AADT_IMPUTED_COARSE
+        c["road_name"] = pd.NA
+        c["lts"] = rules.connector_lts
+        c["fac"] = "connector"
+        frames.append(c)
+
+    keep = [
+        "id", "geometry", "kind", "fac", "lts", "rdclass", "lanes",
+        "speed_mph", "aadt", "aadt_src", "road_name",
+    ]
+    out = pd.concat(
+        [f.reindex(columns=[c for c in keep if c in f.columns or c == "geometry"])
+         for f in frames],
+        ignore_index=True,
+    )
+    out = gpd.GeoDataFrame(out, geometry="geometry", crs=streets.crs)
+    out["lts"] = out["lts"].astype("int8")
+
+    if not out["id"].is_unique:
+        dupes = out["id"][out["id"].duplicated()].unique()[:5]
+        raise ValueError(
+            f"assembled network has duplicate ids (e.g. {list(dupes)}); "
+            "feature ids must be unique for map selection and deep links"
+        )
+
+    log.info(
+        "network assembled: %d features (%d street, %d path, %d connector)",
+        len(out),
+        int((out["kind"] == "street").sum()),
+        int((out["kind"] == "facility").sum()),
+        int((out["kind"] == "connector").sum()),
+    )
+    return out
 
 
 def run_sensitivity(params: Params, out_dir: Path, doc_path: Path) -> None:

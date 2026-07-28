@@ -268,10 +268,15 @@ connector_max_m = 25.0         # 162 of 254 off-road endpoints connect at 25 m
 #  Connectivity
 # ---------------------------------------------------------------------------
 [network]
-# No grid snapping. Centreline endpoints are already exactly coincident;
-# rounding coordinates to a grid put endpoints 0.1 m apart into different
-# cells while merging points 11 m apart on a diagonal.
-node_precision_decimals = 6
+# No grid snapping. Centreline endpoints are already exactly coincident, so
+# nodes come from equality of rounded coordinates. The old snap_to_grid rounded
+# each coordinate to a multiple of the tolerance, which put endpoints 0.1 m
+# apart into different cells while merging points 11 m apart on a diagonal --
+# it manufactured islands in both directions.
+#
+# Node identity deliberately uses meta.coord_decimals, the SAME precision the
+# geometry is exported at. If the graph noded more finely than it exported, the
+# browser would render two lines visibly touching that the graph calls separate.
 min_cluster_segments = 3
 barrier_min_island_segments = 3
 
