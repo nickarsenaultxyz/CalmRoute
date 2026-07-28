@@ -121,10 +121,16 @@ def conflate_on_road(
     streets: gpd.GeoDataFrame,
     facilities: gpd.GeoDataFrame,
     params: Params,
+    *,
+    check_quality: bool = True,
 ) -> gpd.GeoDataFrame:
     """Attach the most protective applicable facility to each centreline.
 
     Returns ``streets`` with ``fac`` and ``fac_source_ids`` columns added.
+
+    ``check_quality`` runs the recall/inflation gate. It is calibrated against
+    the full existing-facility network and is meaningless on a handful of
+    segments, so the scenario pass over funded projects turns it off.
     """
     buffer_m = float(params["conflation.buffer_m"])
     min_cov = float(params["conflation.min_coverage"])
@@ -244,7 +250,8 @@ def conflate_on_road(
     )
     log.info("conflated facility mix: %s", out["fac"].value_counts().to_dict())
 
-    _check_mileage(out, on_road, params)
+    if check_quality:
+        _check_mileage(out, on_road, params)
     return out
 
 

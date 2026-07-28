@@ -282,6 +282,31 @@ barrier_min_island_segments = 3
 
 
 # ---------------------------------------------------------------------------
+#  Export / frontend data contract
+# ---------------------------------------------------------------------------
+[export]
+# Simplification tolerance in degrees. The priority layer is the hero data and
+# is barely simplified; the residential bulk is background context where ~3 m is
+# invisible at the zooms it renders at.
+simplify_priority = 0.00001
+simplify_residential = 0.00003
+
+# Budgets in KB, checked against the GZIPPED size at build time so a schema
+# regression cannot quietly reintroduce a multi-megabyte payload. The old
+# index.html shipped 904 KB gzipped with every byte on the critical path.
+[export.budget_kb]
+"network.geojson" = 260        # critical path
+"residential.geojson" = 420    # deferred
+"graph.json" = 200
+"planned.geojson" = 20
+"islands.json" = 30
+"gaps.json" = 60
+"stats.json" = 8
+"methodology.json" = 12
+"manifest.json" = 2
+
+
+# ---------------------------------------------------------------------------
 #  Scenario / planned projects
 # ---------------------------------------------------------------------------
 [scenario]

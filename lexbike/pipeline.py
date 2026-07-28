@@ -17,11 +17,11 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import geopandas as gpd
+import numpy as np
 import pandas as pd
 
-import geopandas as gpd
-
-from . import conflate, io, network
+from . import conflate, export, io, network
 from . import lts as lts_mod
 from .params import Params
 
@@ -146,10 +146,257 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
     edges, islands = network.label_islands(edges, pairs, params)
     barriers = network.rank_barriers(edges, pairs, islands, params)
 
-    raise NotImplementedError(
-        "stage 5 (export) — see task #5. Network complete: "
-        f"{len(edges)} edges, {len(islands)} islands, {len(barriers)} barrier projects."
+    edges["u"] = [p[0] if p else None for p in pairs]
+    edges["v"] = [p[1] if p else None for p in pairs]
+    edges["mi"] = io.to_working_crs(edges, params).geometry.length / 1609.344
+    edges = export.add_provenance(edges, params)
+
+    log.info("--- stage 5/5: write artifacts ---")
+    stats = write_artifacts(
+        edges, islands, barriers, node_ids, funded, streets, params, out_dir,
+        skip_size_check=skip_size_check,
     )
+    log.info("wrote %d artifacts to %s/", len(list(out_dir.glob('*'))), out_dir)
+    return stats
+
+
+def write_artifacts(
+    edges, islands, barriers, node_ids, funded, streets, params: Params,
+    out_dir: Path, *, skip_size_check: bool = False,
+) -> dict:
+    """Write every file the frontend fetches."""
+    rules = lts_mod.Ruleset.from_params(params)
+
+    # Split so first paint needs only the hero data. Everything that is NOT a
+    # plain low-stress street with no facility goes in the priority layer:
+    # facilities, trails, connectors, and every busy or prohibited road. The
+    # remainder is the residential bulk, which is visual mush at the default
+    # city-wide zoom and can arrive after first paint.
+    is_low = edges["lts"].map(lambda v: lts_mod.is_low_stress(v, rules))
+    priority = edges[(edges["fac"] != "none") | ~is_low].copy()
+    residential = edges[(edges["fac"] == "none") & is_low].copy()
+    log.info("layer split: %d priority / %d residential", len(priority), len(residential))
+
+    export.write_geojson(priority, out_dir / "network.geojson", params,
+                         simplify=float(params["export.simplify_priority"]))
+    export.write_geojson(residential, out_dir / "residential.geojson", params,
+                         simplify=float(params["export.simplify_residential"]))
+
+    # Routing graph. Node coordinates plus u/v/length/lts per edge is everything
+    # a client-side Dijkstra needs; at ~10.8k nodes it is a few hundred KB and
+    # routes in single-digit milliseconds, so nothing is precomputed.
+    coords = [None] * len(node_ids)
+    decimals = int(params["meta.coord_decimals"])
+    for (x, y), idx in node_ids.items():
+        coords[idx] = [round(x, decimals), round(y, decimals)]
+    routable = edges[edges["u"].notna()]
+    export.write_json(
+        {
+            "nodes": coords,
+            "edges": [
+                [int(u), int(v), int(i), round(float(m), 4), int(l)]
+                for u, v, i, m, l in zip(
+                    routable["u"], routable["v"], routable["id"],
+                    routable["mi"], routable["lts"],
+                )
+            ],
+            "edge_fields": ["u", "v", "id", "miles", "lts"],
+        },
+        out_dir / "graph.json",
+    )
+
+    export.write_json(
+        islands.to_dict(orient="records") if len(islands) else [],
+        out_dir / "islands.json",
+    )
+
+    if len(barriers):
+        export.write_geojson(
+            barriers.assign(
+                id=range(len(barriers)),
+                lts=barriers["current_lts"],
+                fac="none",
+                road_name=barriers["name"],
+            ),
+            out_dir / "gaps.geojson", params, simplify=0.0,
+        )
+        export.write_json(
+            barriers.drop(columns="geometry").to_dict(orient="records"),
+            out_dir / "gaps.json",
+        )
+
+    planned = build_planned(funded, streets, edges, params)
+    export.write_json(planned, out_dir / "planned.geojson")
+
+    stats = export.build_stats(edges, islands, barriers, params, extra={
+        "aadt_years": io.aadt_years(),
+        "aadt_measured": int((edges["aadt_src"] == io.AADT_STATION).sum()),
+        "aadt_measured_pct": round(
+            100 * float((edges["aadt_src"] == io.AADT_STATION).mean()), 1),
+    })
+    stats["planned_projects"] = len(planned.get("projects", []))
+    export.write_json(stats, out_dir / "stats.json")
+    export.write_json(export.build_methodology(params), out_dir / "methodology.json")
+
+    bounds = edges.total_bounds
+    export.write_json(
+        {
+            "version": stats["generated"][:10],
+            "generated": stats["generated"],
+            "params_digest": params.digest,
+            "bbox": [round(float(b), 5) for b in bounds],
+            "center": [round(float((bounds[0] + bounds[2]) / 2), 5),
+                       round(float((bounds[1] + bounds[3]) / 2), 5)],
+            "zoom": 11.6,
+            "low_stress_max": rules.low_stress_max,
+            "files": {
+                "network": "network.geojson",
+                "residential": "residential.geojson",
+                "graph": "graph.json",
+                "islands": "islands.json",
+                "gaps": "gaps.json",
+                "gapsGeometry": "gaps.geojson",
+                "planned": "planned.geojson",
+                "stats": "stats.json",
+                "methodology": "methodology.json",
+            },
+            "counts": {
+                "network": len(priority),
+                "residential": len(residential),
+                "nodes": len(node_ids),
+                "islands": len(islands),
+                "gaps": len(barriers),
+            },
+        },
+        out_dir / "manifest.json",
+    )
+
+    log.info("artifact sizes:")
+    export.check_sizes(out_dir, params, enforce=not skip_size_check)
+    return stats
+
+
+def _first_text(*values) -> str:
+    """First non-null, non-blank value as a string.
+
+    A plain ``a or b`` chain raises on pandas NA ("boolean value of NA is
+    ambiguous"), which is easy to write and only fails on the rows that happen
+    to be missing.
+    """
+    for v in values:
+        if v is None or pd.isna(v):
+            continue
+        text = str(v).strip()
+        if text:
+            return text
+    return ""
+
+
+def build_planned(funded, streets, edges, params: Params) -> dict:
+    """What each funded project would change, for the scenario toggle.
+
+    Only the small part is precomputed: which segment ids a project upgrades and
+    to what LTS. The client re-derives the island partition with a union-find on
+    every toggle, because 26 projects are 2^26 combinations and precomputing
+    outcomes is impossible — while a union-find over 14k edges takes under 5 ms.
+    """
+    if funded is None or funded.empty:
+        return {"projects": [], "new_edges": []}
+
+    rules = lts_mod.Ruleset.from_params(params)
+    on_road = funded[funded["on_road"] & (funded["fac"] != "none")]
+    projects = []
+
+    if len(on_road):
+        credited = conflate.conflate_on_road(
+            streets, on_road, params, check_quality=False
+        )
+        affected = credited[credited["fac"] != "none"]
+        by_id = edges.set_index("id")
+        for _, row in affected.iterrows():
+            if row["id"] not in by_id.index:
+                continue
+            current = by_id.loc[row["id"]]
+            new_lts = lts_mod.lts_for_segment(
+                row["fac"], int(current["rdclass"]), int(current["lanes"]),
+                None if pd.isna(current["speed_mph"]) else float(current["speed_mph"]),
+                None if pd.isna(current["aadt"]) else float(current["aadt"]),
+                rules,
+            )
+            if new_lts < int(current["lts"]):
+                projects.append({
+                    "id": int(row["id"]),
+                    "nm": str(row.get("road_name") or ""),
+                    "fac": export.FAC_CODES[row["fac"]],
+                    "lts_now": int(current["lts"]),
+                    "lts_if_built": int(new_lts),
+                })
+
+    # Funded off-road trails are the larger half of the programme (22 of 26) and
+    # the part that actually merges islands: they are NEW geometry, not an
+    # upgrade to an existing centreline. Each is emitted as an edge joining the
+    # existing graph nodes nearest its two ends.
+    #
+    # Limitation, stated because it bounds what the scenario toggle can claim: a
+    # trail end is attached only if an existing node lies within
+    # conflation.connector_max_m. A funded trail landing mid-block gets no
+    # attachment there and will read as its own island rather than merging one.
+    new_edges = []
+    off_road = funded[~funded["on_road"]]
+    if len(off_road) and len(edges):
+        max_m = float(params["conflation.connector_max_m"])
+        decimals = int(params["meta.coord_decimals"])
+
+        node_xy: dict[tuple, int] = {}
+        for u, v, geom in zip(edges["u"], edges["v"], edges.geometry):
+            if pd.isna(u) or pd.isna(v):
+                continue
+            coords = list(geom.coords) if geom.geom_type == "LineString" else None
+            if not coords:
+                continue
+            node_xy[(round(coords[0][0], decimals), round(coords[0][1], decimals))] = int(u)
+            node_xy[(round(coords[-1][0], decimals), round(coords[-1][1], decimals))] = int(v)
+
+        keys = np.array(list(node_xy.keys())) if node_xy else np.empty((0, 2))
+        ids = list(node_xy.values())
+        off_m = io.to_working_crs(off_road, params)
+        # Degrees are fine for choosing the nearest candidate; the accept/reject
+        # test below is done in metres.
+        for (_, row), geom_m in zip(off_road.iterrows(), off_m.geometry):
+            geom = row.geometry
+            if geom.geom_type != "LineString" or len(keys) == 0:
+                continue
+            ends = [geom.coords[0], geom.coords[-1]]
+            attached = []
+            for x, y in ends:
+                d = np.hypot(keys[:, 0] - x, keys[:, 1] - y)
+                k = int(np.argmin(d))
+                # ~111 km per degree of latitude; adequate for a radius test.
+                if d[k] * 111_000 <= max_m:
+                    attached.append(ids[k])
+                else:
+                    attached.append(None)
+            new_edges.append({
+                "nm": _first_text(row.get("network_name"), row.get("facility_name")),
+                "fac": export.FAC_CODES[row["fac"]],
+                "lts": rules.path_lts,
+                "miles": round(float(geom_m.length) / 1609.344, 4),
+                "u": attached[0],
+                "v": attached[1],
+                "connects_both_ends": attached[0] is not None and attached[1] is not None,
+            })
+
+    joined = sum(1 for e in new_edges if e["connects_both_ends"])
+    log.info(
+        "planned: %d funded facilities -> %d segment upgrades, %d new trail edges "
+        "(%d attach at both ends and can merge islands)",
+        len(funded), len(projects), len(new_edges), joined,
+    )
+    return {
+        "projects": projects,
+        "new_edges": new_edges,
+        "funded_facilities": int(len(funded)),
+    }
 
 
 def assemble_edges(streets, paths, connectors, params: Params):
