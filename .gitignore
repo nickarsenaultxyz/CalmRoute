@@ -1,2 +1,8 @@
 2013 Network Connectivity for Low Stress Bicycling (Furth, Mekuria) TRB compendium.pdf
 __pycache__/
+.venv/
+
+# Generated artifacts. Regenerable from the committed sources via `make build`;
+# committing them is what grew this repository to ~70 MB.
+data/
+.pytest_cache/

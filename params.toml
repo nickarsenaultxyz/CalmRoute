@@ -1,0 +1,326 @@
+#  Lexington bicycle Level of Traffic Stress — all tunable parameters.
+#
+#  This file is the single source of truth for the LTS rules. It is serialized
+#  verbatim into data/methodology.json at build time, so the published
+#  methodology can never drift from the rules that were actually executed.
+#
+#  Override any value from the command line for sensitivity runs:
+#      python -m lexbike build --set mixed.speed_35_lts=2 --out data/sens_a
+
+[meta]
+# Bumped by hand when a rule change makes previously published numbers stale.
+ruleset_version = "2.0.0"
+crs_working = 32616          # UTM 16N — metres, correct for Kentucky
+crs_output = 4326
+coord_decimals = 5           # ~0.87 m at 38°N; see docs/sensitivity.md
+
+
+# ---------------------------------------------------------------------------
+#  Facility classification
+# ---------------------------------------------------------------------------
+#
+#  IMPORTANT — only Type_Facility is used.
+#
+#  lexbike.geojson carries three facility-ish columns. We probed all 528 rows:
+#
+#    Type_Facility     the physical facility that exists on the ground
+#    Name_Facility     a Status-prefixed restatement of Type_Facility; it agrees
+#                      1:1 (EXISTING ROAD SHOULDER <-> Shoulder, 9/9;
+#                      EXISTING PREFERRED ROUTE <-> Preferred Route, 207/207)
+#    AltType_Facility  a corridor/network designation or RECOMMENDED upgrade —
+#                      *not* infrastructure that exists
+#
+#  Reading AltType as a facility would be wrong. Concretely it would invent
+#  37 bike lanes on Redding Rd (Type=Preferred Route, Alt=Bicycle Lane, but
+#  Name_Facility='EXISTING PREFERRED ROUTE'), and would promote 7 road
+#  shoulders and 18 bike lanes to LTS 1 shared-use paths via
+#  Alt='Shared Use Trail' on segments whose Type_Road is 'On Road'.
+#
+#  AltType is still valuable — it encodes the recommended treatment per
+#  corridor — but it belongs to the scenario/planning feature, not to a
+#  rating of what exists today. See [scenario].
+
+[facility.type_map]
+# Every distinct Type_Facility value in the source must appear here.
+# An unrecognized value raises rather than silently degrading to "none",
+# so a future LFUCG data update fails loudly.
+"Shared Use Path"       = "path"
+"Buffered Bicycle Lane" = "buffered"
+"Bicycle Lane"          = "lane"
+"Shoulder"              = "shoulder"
+"Sharrow"               = "sharrow"
+"Preferred Route"       = "none"      # signed wayfinding only; no treatment
+
+# Protective ordering, used when several facilities conflate onto one
+# centreline. Higher wins.
+[facility.rank]
+none      = 0
+sharrow   = 1
+shoulder  = 2
+lane      = 3
+buffered  = 4
+protected = 5   # no existing segment in Lexington; retained for future data
+path       = 6
+connector  = 7  # synthetic edge joining an off-road path to the street network
+
+
+# ---------------------------------------------------------------------------
+#  Road classification
+# ---------------------------------------------------------------------------
+[rdclass]
+prohibited = [1, 2]              # Interstate, Parkway/Expressway — bikes barred
+# One source row has RDCLASS 69 (W HICKMAN PLANT RD, SPEED 25, CartoClass 4);
+# an obvious typo for 6. Normalized with a logged warning.
+typo_fixes = { 69 = 6 }
+
+[rdclass.labels]
+1 = "Interstate / Highway"
+2 = "Parkway / Expressway"
+3 = "Arterial"
+4 = "Major Collector"
+5 = "Minor Collector"
+6 = "Local Street"
+7 = "Service Road"
+8 = "Alley"
+
+
+# ---------------------------------------------------------------------------
+#  Lane-count surrogate
+# ---------------------------------------------------------------------------
+#
+#  No lane count exists in any source, so this is an explicitly documented
+#  surrogate, shipped to the browser as a property so it stays auditable.
+#
+#  The subtlety: ONEWAY != 'B' means opposite things by road class. On
+#  arterials it is 817 of 1,091 segments — divided roads digitized as two
+#  centrelines, i.e. MORE lanes. On local streets it is 810 of 11,420 —
+#  genuine downtown one-ways, i.e. FEWER lanes.
+
+[lanes]
+default = 2
+
+[[lanes.rules]]
+rdclass = [3]
+oneway = "directional"
+lanes = 3            # one direction of a divided arterial
+
+[[lanes.rules]]
+rdclass = [3]
+oneway = "both"
+cartoclass = [1, 2]
+lanes = 5            # major undivided arterial
+
+[[lanes.rules]]
+rdclass = [3]
+oneway = "both"
+lanes = 3
+
+[[lanes.rules]]
+rdclass = [4]
+oneway = "directional"
+lanes = 2
+
+[[lanes.rules]]
+rdclass = [4]
+oneway = "both"
+lanes = 3
+
+[[lanes.rules]]
+rdclass = [5, 6, 7, 8]
+oneway = "directional"
+lanes = 1
+
+[[lanes.rules]]
+rdclass = [5, 6, 7, 8]
+oneway = "both"
+lanes = 2
+
+
+# ---------------------------------------------------------------------------
+#  Traffic volume (AADT)
+# ---------------------------------------------------------------------------
+[aadt]
+# KYTC station ids carry a 3-digit county prefix. Keying on the last three
+# characters rather than stripping a hardcoded '034' also picks up the
+# records prefixed 105/057/025.
+station_key_chars = 3
+# Fallback cascade for the ~11,700 segments with no count station.
+impute_groups = [
+  ["RDCLASS", "CartoClass", "MAINTENANCE"],
+  ["RDCLASS", "CartoClass"],
+  ["RDCLASS"],
+]
+impute_floor = 500
+
+# KYTC only counts state-maintained routes, so observed medians are drawn from
+# the busiest third of each class. Including MAINTENANCE in the first group key
+# is a partial correction, not a cure. Segments resting on a coarse imputation
+# ship with cf=0 (low confidence) and the UI says so.
+bias_note = """KYTC traffic counts exist only on state-maintained routes. \
+Volumes for local streets are imputed from class medians and are estimates, \
+not measurements."""
+
+
+# ---------------------------------------------------------------------------
+#  LTS thresholds
+# ---------------------------------------------------------------------------
+#
+#  Scale is 0-4. There is no LTS 5: Furth/Mekuria define 1-4, and the old
+#  code's "LTS 5" conflated two different things. Split here into
+#      lts = 0  bikes legally prohibited (Interstate/Parkway)
+#      lts = 4  legal but high stress (an arterial with no facility)
+
+[lts]
+low_stress_max = 2          # "comfortable for most adults" — the network threshold
+
+# Mixed traffic: no facility, or sharrows (which the literature treats as
+# equivalent to no facility).
+[lts.mixed]
+speed_25_aadt_750_lts = 1   # requires lanes <= 2
+speed_25_aadt_3000_lts = 2
+speed_25_else_lts = 3
+speed_30_aadt_3000_lts = 2
+speed_30_else_lts = 3
+speed_35_lts = 3            # LOCKED: Mekuria/Furth Table 8. The single
+                            # highest-leverage parameter in the model —
+                            # 1,104 minor-collector segments hinge on it.
+                            # See docs/sensitivity.md before changing.
+speed_40_plus_lts = 4
+lanes_4_5_speed_30_lts = 3
+lanes_4_5_else_lts = 4
+lanes_6_plus_lts = 4
+aadt_break_low = 750
+aadt_break_mid = 3000
+
+[lts.path]
+lts = 1
+
+[lts.protected]
+lts = 1
+
+[lts.buffered]
+speed_30_lanes_2_lts = 1
+speed_35_lts = 2
+else_lts = 3
+
+[lts.lane]
+speed_30_lts = 2
+speed_35_lts = 3
+else_lts = 4
+wide_road_penalty = 1       # +1 LTS when lanes >= 4, capped at 4
+wide_road_lanes = 4
+
+[lts.shoulder]
+speed_35_lts = 3
+else_lts = 4
+
+[lts.connector]
+lts = 1                     # short, visible, dashed; see [conflation].connector_max_m
+
+[lts.labels]
+# Plain language first — this is a public map. The numeric LTS is secondary.
+0 = { short = "Bikes not permitted", detail = "Interstate or parkway" }
+1 = { short = "Relaxed",                     detail = "Good for kids and new riders" }
+2 = { short = "Comfortable for most adults", detail = "Quiet streets and bike lanes" }
+3 = { short = "Busy",                        detail = "For confident riders" }
+4 = { short = "Stressful",                   detail = "Experienced riders only" }
+
+
+# ---------------------------------------------------------------------------
+#  Conflation: bike facilities -> street centrelines
+# ---------------------------------------------------------------------------
+#
+#  The LFUCG centreline layer is the one canonical network (13,775 features,
+#  already exactly noded — 99.7% of nodes in a single component). The bike
+#  layer is an independently digitized overlay sharing almost no nodes with
+#  it: only 241 of its 1,056 endpoints land within 1 m of a centreline
+#  endpoint. So on-road facilities become centreline ATTRIBUTES; only
+#  off-road paths keep their own geometry.
+
+[conflation]
+buffer_m = 12.0
+min_coverage = 0.55            # tune against the mileage gate below
+bearing_tolerance_deg = 30.0
+exclude_rdclass = [1, 2]       # never conflate a facility onto an interstate
+
+# Build fails if conflated on-road mileage strays from the source. Measured
+# during exploration: coverage 0.50 gave -32%, a global buffer union at 0.60
+# gave +13% and wrongly captured 10 interstate segments.
+source_on_road_miles = 222.5
+mileage_tolerance = 0.10
+
+connector_max_m = 25.0         # 162 of 254 off-road endpoints connect at 25 m
+
+
+# ---------------------------------------------------------------------------
+#  Connectivity
+# ---------------------------------------------------------------------------
+[network]
+# No grid snapping. Centreline endpoints are already exactly coincident;
+# rounding coordinates to a grid put endpoints 0.1 m apart into different
+# cells while merging points 11 m apart on a diagonal.
+node_precision_decimals = 6
+min_cluster_segments = 3
+barrier_min_island_segments = 3
+
+
+# ---------------------------------------------------------------------------
+#  Scenario / planned projects
+# ---------------------------------------------------------------------------
+[scenario]
+# Status == 'Funded' (26 segments) drives the "if these get built" toggle.
+funded_status = "Funded"
+existing_status = "Existing"
+# AltType_Facility, which is NOT used for rating what exists, IS the right
+# source for the recommended treatment on a corridor.
+use_alttype_as_recommendation = true
+
+
+# ---------------------------------------------------------------------------
+#  Confidence
+# ---------------------------------------------------------------------------
+[confidence]
+# 2 high / 1 medium / 0 low. A segment also drops to 0 when its LTS flips
+# under any variant of the sensitivity sweep — the honest definition of
+# "uncertain", computed mechanically rather than asserted.
+high_requires_station = true
+sensitivity_flip_forces_low = true
+
+
+# ---------------------------------------------------------------------------
+#  Sensitivity sweep
+# ---------------------------------------------------------------------------
+[[sensitivity.runs]]
+name = "mixed_35mph_as_lts2"
+set = { "lts.mixed.speed_35_lts" = 2 }
+why = "Dominant parameter: 1,104 minor-collector segments; largest island 42% vs 12%."
+
+[[sensitivity.runs]]
+name = "aadt_break_2000"
+set = { "lts.mixed.aadt_break_mid" = 2000 }
+why = "995 imputed RDCLASS-5 segments at 25 mph hinge on this threshold."
+
+[[sensitivity.runs]]
+name = "aadt_break_5000"
+set = { "lts.mixed.aadt_break_mid" = 5000 }
+why = "Upper bound on the same question."
+
+[[sensitivity.runs]]
+name = "conflation_buffer_8m"
+set = { "conflation.buffer_m" = 8.0 }
+why = "Measured 150 vs 252 conflated miles across the 8-20 m range."
+
+[[sensitivity.runs]]
+name = "conflation_buffer_20m"
+set = { "conflation.buffer_m" = 20.0 }
+why = "Upper bound on conflation aggressiveness."
+
+[[sensitivity.runs]]
+name = "connector_15m"
+set = { "conflation.connector_max_m" = 15.0 }
+why = "Off-road trail attachment; 162 of 254 endpoints connect at 25 m."
+
+[[sensitivity.runs]]
+name = "connector_40m"
+set = { "conflation.connector_max_m" = 40.0 }
+why = "Tests whether trail connectivity is an artifact of the radius."
