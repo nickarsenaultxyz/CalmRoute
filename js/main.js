@@ -1,6 +1,8 @@
 /** Application entry point. */
 
-import { LTS, LTS_ORDER_LEGEND } from './config.js';
+import {
+  DEFAULT_ROUTE_LEVEL, LTS, LTS_ORDER_LEGEND, QUIETEST_ROUTE_LEVEL, ROUTE_LEVELS,
+} from './config.js';
 import {
   deferResidential, loadContext, loadCouncil, loadGraph, loadManifest,
   loadMethodology, loadNetwork, loadStats,
@@ -39,7 +41,10 @@ const app = window.__lexbike = {
   selected: null,
   hovered: null,
   graph: null,
-  route: { from: null, to: null, strict: false, picking: 'from', result: null },
+  route: {
+    from: null, to: null, level: DEFAULT_ROUTE_LEVEL,
+    picking: 'from', result: null,
+  },
 };
 
 function setLoading(text) {
@@ -203,7 +208,19 @@ function showRoute({ push = true } = {}) {
       app.route.to = t;
       recomputeRoute();
     },
-    onStrict: (on) => { app.route.strict = on; recomputeRoute(); },
+    onLevel: (level) => {
+      app.route.level = Math.max(0, Math.min(QUIETEST_ROUTE_LEVEL, level));
+      announce(`Route preference: ${ROUTE_LEVELS[app.route.level].label}.`);
+      recomputeRoute();
+    },
+    // The offer attached to a route that turned out to be busy: switch to the
+    // setting that found the quieter one, so the slider agrees with the map.
+    onQuieter: () => {
+      const alt = app.route.result?.quieter;
+      if (!alt) return;
+      app.route.level = alt.level;
+      recomputeRoute();
+    },
     onAccept: () => {
       // Draw the compromised route the rider explicitly asked to see.
       if (app.route.fallbackResult) {
@@ -213,7 +230,7 @@ function showRoute({ push = true } = {}) {
       }
     },
     onNav: (view) => openView(view, { push: true }),
-  });
+  }, app.route);
   write(app.state, { push });
 }
 
@@ -299,7 +316,7 @@ async function recomputeRoute() {
 
   const g = await ensureGraph();
   const { snapToNetwork } = await import('./lib/graph.js');
-  const { route } = await import('./lib/dijkstra.js');
+  const dj = await import('./lib/dijkstra.js');
 
   const geometryOf = (id) => app.featuresById.get(id)?.geometry?.coordinates;
   const snapA = snapToNetwork(g, geometryOf, from.lng, from.lat);
@@ -313,16 +330,17 @@ async function recomputeRoute() {
   app.route.snapA = snapA;
   app.route.snapB = snapB;
 
-  const strict = app.route.strict;
-  const primary = routeBetweenSnaps(g, route, snapA, snapB,
-    strict ? 'avoid' : 'comfort');
-  const shortest = routeBetweenSnaps(g, route, snapA, snapB, 'shortest');
+  const level = app.route.level;
+  const primary = routeBetweenSnaps(g, dj, snapA, snapB,
+    ROUTE_LEVELS[level].key);
+  const shortest = routeBetweenSnaps(g, dj, snapA, snapB, 'shortest');
 
   if (!primary) {
     // Distinguish "no comfortable route" from "not connected at all". The
-    // first is the finding; the second is a data gap.
-    const fallback = strict
-      ? routeBetweenSnaps(g, route, snapA, snapB, 'comfort') : null;
+    // first is the finding; the second is a data gap. Only the strictest
+    // setting is a hard filter, so only it can refuse a connected pair.
+    const fallback = level === QUIETEST_ROUTE_LEVEL
+      ? routeBetweenSnaps(g, dj, snapA, snapB, 'quiet') : null;
     app.route.fallbackResult = fallback
       ? { ...fallback, detour: shortest ? fallback.miles / shortest.miles : null }
       : null;
@@ -344,11 +362,47 @@ async function recomputeRoute() {
   app.route.result = {
     kind: 'ok',
     ...primary,
+    level,
     detour: shortest ? primary.miles / shortest.miles : null,
+    quieter: quieterThan(g, dj, snapA, snapB, primary, level),
   };
   drawRoute(primary);
   showRoute({ push: false });
-  announce(`Route found: ${primary.miles.toFixed(1)} miles.`);
+  announce(primary.stressMiles > 0.01
+    ? `Route found: ${primary.miles.toFixed(1)} miles, including ${
+      primary.stressMiles.toFixed(1)} on busy roads.`
+    : `Route found: ${primary.miles.toFixed(1)} miles, comfortable the whole way.`);
+}
+
+/**
+ * The least-stressful alternative worth offering, or null.
+ *
+ * A note saying "0.4 miles of this is busy" is only half an answer; the rider's
+ * next question is what avoiding it would cost. So the quieter settings are
+ * searched too, and the offer carries the real distance rather than being a
+ * button that might do nothing. Scanning forward rather than stopping at the
+ * next notch matters because one step quieter often finds the same road — the
+ * penalty has to clear the detour before the route changes at all.
+ *
+ * Costs up to two extra searches, each four Dijkstras of 0.2-0.8 ms, and only
+ * runs when the route is actually stressful.
+ */
+function quieterThan(g, dj, snapA, snapB, primary, level) {
+  if (primary.stressMiles <= 0.01) return null;
+
+  for (let next = level + 1; next <= QUIETEST_ROUTE_LEVEL; next++) {
+    const alt = routeBetweenSnaps(g, dj, snapA, snapB, ROUTE_LEVELS[next].key);
+    if (!alt) continue;
+    // Either measure improving is an improvement. Requiring less total stress
+    // would reject the most valuable trade the quieter settings make -- swapping
+    // an arterial for a longer run of busy collector, which lowers `severeMiles`
+    // while raising `stressMiles`. Ties are not offers: an unchanged route under
+    // a different label reads as a broken button.
+    const lessArterial = alt.severeMiles < primary.severeMiles - 0.01;
+    const lessStress = alt.stressMiles < primary.stressMiles - 0.01;
+    if (lessArterial || lessStress) return { level: next, ...alt };
+  }
+  return null;
 }
 
 /**
@@ -362,16 +416,19 @@ async function recomputeRoute() {
  *
  * Four searches still cost under 5 ms on this graph.
  */
-function routeBetweenSnaps(g, route, snapA, snapB, mode) {
+function routeBetweenSnaps(g, dj, snapA, snapB, mode) {
   // Both points on the same edge: no search needed, just the piece between.
   if (snapA.edge === snapB.edge) {
     const frac = Math.abs(snapB.fraction - snapA.fraction);
     const miles = g.eMi[snapA.edge] * frac;
     const lts = g.eLts[snapA.edge];
-    if (mode === 'avoid' && (lts < 1 || lts > 2)) return null;
+    // Ask the mode itself rather than re-deriving which ratings it allows;
+    // hardcoding that list here is how it drifts from the penalty table.
+    if (!dj.passable(g, snapA.edge, mode)) return null;
     return {
       edges: [snapA.edge], featureIds: [g.eId[snapA.edge]],
-      miles, stressMiles: lts > 2 ? miles : 0, worstLts: lts,
+      miles, stressMiles: lts > 2 ? miles : 0,
+      severeMiles: lts === 4 ? miles : 0, worstLts: lts,
       partial: { sameEdge: true },
     };
   }
@@ -384,7 +441,7 @@ function routeBetweenSnaps(g, route, snapA, snapB, mode) {
   let best = null;
   for (const a of ends(snapA)) {
     for (const b of ends(snapB)) {
-      const r = route(g, a.node, b.node, mode);
+      const r = dj.route(g, a.node, b.node, mode);
       if (!r) continue;
       // Charge the partial edge at each end so the comparison is fair.
       const addA = g.eMi[snapA.edge] * a.frac;
@@ -403,6 +460,7 @@ function routeBetweenSnaps(g, route, snapA, snapB, mode) {
     featureIds: r.featureIds,
     miles: best.total,
     stressMiles: r.stressMiles + (ltsA > 2 ? addA : 0) + (ltsB > 2 ? addB : 0),
+    severeMiles: r.severeMiles + (ltsA === 4 ? addA : 0) + (ltsB === 4 ? addB : 0),
     worstLts: Math.max(r.worstLts, ltsA, ltsB),
     partial: { startNode: a.node, endNode: b.node },
   };

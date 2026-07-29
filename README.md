@@ -219,13 +219,30 @@ council's contact page rather than guessing.
 
 ## Planning a route
 
-Pick two points and the map routes you over quiet streets, going further to
-avoid busy ones. It reports the trade honestly: total distance, how much longer
-that is than the direct line, and how much of it is still on a busy road —
-drawn in red so you see the compromise before you set off.
+Pick two points and the map routes you over quiet streets, going a little
+further to avoid busy ones. It reports the trade honestly: total distance, how
+much longer that is than the direct line, and how much of it is still on a busy
+road — drawn in red so you see the compromise before you set off.
 
-Tick **only quiet streets** and it will refuse rather than compromise. That
-refusal is the most useful screen in the tool:
+**How much you mind busy roads is a slider**, because it is a preference and not
+a fact. It has four notches, from *most direct* to *quiet streets only*, and the
+default is **balanced**. Balanced is measured rather than asserted: over 120
+trips of 1.5–8 direct miles, it adds a median 15% to the distance and cuts the
+median mileage on an arterial from 0.80 to 0.05 miles. The full table, and why
+keeping *busy* cheap is what makes avoiding *stressful* affordable, is in
+`js/config.js`.
+
+The previous single setting was what is now one notch quieter, and at a median
+29% detour it was the kind of route a rider looks at once and then ignores.
+
+When the route it picks still uses a busy road, it says so — and, having already
+searched for the alternative, offers it with the price attached:
+
+> **There is a quieter way.** 0.75 mi further (5.01 mi total), and cuts the busy
+> part to 1.59 mi.
+
+Drag the slider to **quiet streets only** and it will refuse rather than
+compromise. That refusal is the most useful screen in the tool:
 
 > There's no comfortable route between these two places. Your start and
 > destination sit on different low-stress islands (#0 and #1). The quiet

@@ -348,11 +348,36 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
   flex: 0 0 auto; font-size: 12px; color: var(--accent); padding: 6px;
 }
 
-.check {
-  display: flex; gap: 9px; align-items: flex-start;
-  margin: 14px 0 0; font-size: 13px; color: var(--ink-soft); cursor: pointer;
+/* The comfort/distance slider. `accent-color` styles the track and thumb in
+   every current engine, so there is no need to rebuild the control per-vendor
+   and lose the platform's own keyboard and touch behaviour with it. */
+.stress-pref { margin: 18px 0 0; }
+.stress-pref > label {
+  display: block; font-size: 13px; font-weight: 550; color: var(--ink);
 }
-.check input { margin-top: 2px; flex: 0 0 auto; }
+.stress-pref input[type="range"] {
+  display: block; width: 100%; margin: 10px 0 0;
+  min-height: 44px;                       /* a fingertip target, not a hairline */
+  accent-color: var(--accent); cursor: pointer;
+}
+/* Clear of the focus ring, which is 3px at 2px offset and would otherwise be
+   drawn straight through these labels. */
+.stress-pref .ticks {
+  display: flex; justify-content: space-between; margin-top: 6px;
+  font-size: 11.5px; color: var(--ink-faint);
+}
+.stress-pref .tech { margin-top: 6px; }
+.stress-pref .tech b { color: var(--ink); }
+
+/* The quieter-route offer. Green edge because it is the comfortable option,
+   matching the LTS 1 swatch rather than inventing a third accent. */
+.alt {
+  margin: 12px 0 0; padding: 12px; border-radius: 8px;
+  border: 1px dashed var(--line); background: var(--bg);
+}
+.alt b { display: block; font-size: 13.5px; }
+.alt span { display: block; font-size: 12.5px; color: var(--ink-soft); }
+.alt .share-actions { margin-top: 10px; }
 
 .verdict {
   margin: 16px 0 0; padding: 12px; border-radius: 8px;
