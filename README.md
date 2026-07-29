@@ -211,6 +211,28 @@ district layer is unavailable at build time, or a street falls outside the
 district boundaries (19 of 14,169 do), the map says so and links to the
 council's contact page rather than guessing.
 
+## Planning a route
+
+Pick two points and the map routes you over quiet streets, going further to
+avoid busy ones. It reports the trade honestly: total distance, how much longer
+that is than the direct line, and how much of it is still on a busy road —
+drawn in red so you see the compromise before you set off.
+
+Tick **only quiet streets** and it will refuse rather than compromise. That
+refusal is the most useful screen in the tool:
+
+> There's no comfortable route between these two places. Your start and
+> destination sit on different low-stress islands (#0 and #1). The quiet
+> streets are there; they just don't join up.
+>
+> The best available route is 4.06 mi and uses 0.38 mi of busy road.
+
+All of it runs in the browser. Nothing about routing is precomputed — an
+all-pairs structure over 10,842 nodes would be 117 million pairs and still could
+not answer a question with an adjustable stress threshold. A Dijkstra over the
+whole network takes **under a millisecond**, so it is cheaper to just run one:
+graph build 7 ms, query 0.2–0.8 ms, measured on the real network.
+
 ## Where the gaps are
 
 `make build` ranks every high-stress segment whose two ends sit on *different*

@@ -138,3 +138,68 @@ export function swatchSvg(lts) {
           stroke-width="${Math.max(3, s.width)}" stroke-linecap="butt"${dash}/>
   </svg>`;
 }
+
+
+/* ------------------------------------------------------------------- route */
+
+/**
+ * Route rendering: a bright casing, the line, and the stressful portion
+ * overpainted in red on top.
+ *
+ * The overpaint is the point. A router that quietly routes someone down an
+ * arterial and shows one uniform line has hidden the compromise it made; this
+ * makes the trade visible before they set off.
+ */
+export function addRouteLayers(map) {
+  if (map.getSource('route')) return;
+  const empty = { type: 'FeatureCollection', features: [] };
+  map.addSource('route', { type: 'geojson', data: empty });
+  map.addSource('route-endpoints', { type: 'geojson', data: empty });
+
+  map.addLayer({
+    id: 'route-casing', type: 'line', source: 'route',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': '#ffffff', 'line-width': 12, 'line-opacity': 0.95 },
+  });
+  map.addLayer({
+    id: 'route-line', type: 'line', source: 'route',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    // Near-black, NOT blue. The first attempt used #1d4ed8, which is a shade
+    // away from the LTS 2 blue it is drawn on top of -- the route was rendering
+    // correctly and was simply invisible against the network. Every hue in the
+    // LTS ramp is spoken for (green, blue, orange, red, grey) and violet is the
+    // planned-projects layer, so the route takes the one slot left.
+    paint: { 'line-color': '#111827', 'line-width': 6 },
+  });
+  map.addLayer({
+    id: 'route-stress', type: 'line', source: 'route',
+    filter: ['>', ['get', 'lts'], 2],
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': '#dc2626', 'line-width': 6 },
+  });
+  map.addLayer({
+    id: 'route-endpoints', type: 'circle', source: 'route-endpoints',
+    paint: {
+      'circle-radius': 8,
+      'circle-color': ['match', ['get', 'role'], 'from', '#16a34a', '#dc2626'],
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': 3,
+    },
+  });
+}
+
+export function setRoute(map, featureCollection) {
+  map.getSource('route')?.setData(
+    featureCollection || { type: 'FeatureCollection', features: [] });
+}
+
+export function setRouteEndpoints(map, points) {
+  map.getSource('route-endpoints')?.setData({
+    type: 'FeatureCollection',
+    features: points.filter(Boolean).map((p) => ({
+      type: 'Feature',
+      properties: { role: p.role },
+      geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+    })),
+  });
+}

@@ -86,6 +86,7 @@ export function render(stats, state) {
       network readable — turn them on to colour them in.
     </p>`}
     <nav class="panel-nav" aria-label="More">
+      <button class="btn" data-nav="route">Plan a route</button>
       <button class="btn" data-nav="browse">Browse streets as a list</button>
       <button class="btn" data-nav="share">Share</button>
       <button class="btn" data-nav="style">Map style</button>

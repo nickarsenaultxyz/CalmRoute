@@ -2,11 +2,12 @@
 
 import { LTS, LTS_ORDER_LEGEND } from './config.js';
 import {
-  deferResidential, loadContext, loadCouncil, loadManifest, loadMethodology,
-  loadNetwork, loadStats,
+  deferResidential, loadContext, loadCouncil, loadGraph, loadManifest,
+  loadMethodology, loadNetwork, loadStats,
 } from './data.js';
 import {
-  addLayers, addSources, hitLayers, setLtsVisible, setSourceVisible,
+  addLayers, addRouteLayers, addSources, hitLayers, setLtsVisible,
+  setRoute, setRouteEndpoints, setSourceVisible,
 } from './layers.js';
 import { announce, easeTo, isCoarsePointer } from './lib/a11y.js';
 import { debounce, onPopState, read, write } from './lib/urlstate.js';
@@ -16,6 +17,7 @@ import * as browse from './views/browse.js';
 import * as detail from './views/detail.js';
 import * as legend from './views/legend.js';
 import * as methodology from './views/methodology.js';
+import * as routeView from './views/route.js';
 import * as settings from './views/settings.js';
 import * as share from './views/share.js';
 
@@ -35,6 +37,8 @@ const app = window.__lexbike = {
   featuresById: new Map(),
   selected: null,
   hovered: null,
+  graph: null,
+  route: { from: null, to: null, strict: false, picking: 'from', result: null },
 };
 
 function setLoading(text) {
@@ -96,6 +100,7 @@ function openView(view, { push = true } = {}) {
   if (view === 'share') return showShare({ push });
   if (view === 'style') return showSettings({ push });
   if (view === 'methodology') return showMethodology({ push });
+  if (view === 'route') return showRoute({ push });
   return showLegend({ push });
 }
 
@@ -169,6 +174,48 @@ function showMethodology({ push = true } = {}) {
   write(app.state, { push });
 }
 
+function showRoute({ push = true } = {}) {
+  app.state.view = 'route';
+  const body = app.panel.show({
+    title: 'Plan a route',
+    html: routeView.render(app.route),
+  });
+  routeView.mount(body, {
+    onPick: (which) => {
+      app.route.picking = app.route.picking === which ? null : which;
+      announce(app.route.picking
+        ? `Tap the map to set the ${which === 'from' ? 'start' : 'destination'}.`
+        : 'Cancelled.');
+      showRoute({ push: false });
+    },
+    onClear: (which) => { app.route[which] = null; recomputeRoute(); },
+    onClearBoth: () => {
+      app.route.from = app.route.to = null;
+      app.route.result = null;
+      app.route.picking = 'from';
+      drawRoute(null);
+      showRoute({ push: false });
+    },
+    onSwap: () => {
+      const t = app.route.from;
+      app.route.from = app.route.to;
+      app.route.to = t;
+      recomputeRoute();
+    },
+    onStrict: (on) => { app.route.strict = on; recomputeRoute(); },
+    onAccept: () => {
+      // Draw the compromised route the rider explicitly asked to see.
+      if (app.route.fallbackResult) {
+        app.route.result = { kind: 'ok', ...app.route.fallbackResult };
+        drawRoute(app.route.fallbackResult);
+        showRoute({ push: false });
+      }
+    },
+    onNav: (view) => openView(view, { push: true }),
+  });
+  write(app.state, { push });
+}
+
 function showSettings({ push = true } = {}) {
   app.state.view = 'style';
   const body = app.panel.show({
@@ -211,6 +258,133 @@ function showDetail(feature, { push = true } = {}) {
 const detailRatingWord = (lts) =>
   ({ 0: 'bikes not permitted', 1: 'relaxed', 2: 'comfortable for most adults',
      3: 'busy', 4: 'stressful' }[lts] || 'unknown');
+
+/* ---------------------------------------------------------------- routing */
+
+/** Load the graph and build the CSR structure once, on first use. */
+async function ensureGraph() {
+  if (app.graph) return app.graph;
+  if (!app.graphPromise) {
+    // The route is drawn from geometry already in memory, keyed by feature id,
+    // so every layer the route can traverse must be loaded -- not necessarily
+    // visible. Without this the quiet-street portions of a route have no
+    // geometry and the line renders as disconnected fragments.
+    app.graphPromise = Promise.all([
+      loadGraph(app.manifest),
+      app.residential ? app.residential.ensure() : null,
+    ]).then(async ([raw]) => {
+      const { buildGraph, components } = await import('./lib/graph.js');
+      app.graph = buildGraph(raw);
+      // Island labels answer "is a comfortable route even possible" before a
+      // search runs, so the failure message can name both islands.
+      app.lowStressLabels = components(app.graph, 2);
+      return app.graph;
+    });
+  }
+  return app.graphPromise;
+}
+
+async function recomputeRoute() {
+  const { from, to } = app.route;
+  if (!from || !to) {
+    app.route.result = null;
+    drawRoute(null);
+    showRoute({ push: false });
+    return;
+  }
+
+  app.route.result = { kind: 'pending' };
+  showRoute({ push: false });
+
+  const g = await ensureGraph();
+  const { nearestNode } = await import('./lib/graph.js');
+  const { route } = await import('./lib/dijkstra.js');
+
+  const a = nearestNode(g, from.lng, from.lat);
+  const b = nearestNode(g, to.lng, to.lat);
+  if (a < 0 || b < 0 || a === b) {
+    app.route.result = { kind: 'none' };
+    drawRoute(null);
+    showRoute({ push: false });
+    return;
+  }
+
+  const strict = app.route.strict;
+  const primary = route(g, a, b, strict ? 'avoid' : 'comfort');
+  const shortest = route(g, a, b, 'shortest');
+
+  if (!primary) {
+    // Distinguish "no comfortable route" from "not connected at all". The
+    // first is the finding; the second is a data gap.
+    const fallback = strict ? route(g, a, b, 'comfort') : null;
+    app.route.fallbackResult = fallback
+      ? { ...fallback, detour: shortest ? fallback.miles / shortest.miles : null }
+      : null;
+    const sameIsland = app.lowStressLabels
+      && app.lowStressLabels[a] === app.lowStressLabels[b];
+    app.route.result = (fallback || !sameIsland)
+      ? {
+          kind: 'blocked',
+          islandA: islandOf(a),
+          islandB: islandOf(b),
+          fallback: app.route.fallbackResult,
+        }
+      : { kind: 'none' };
+    drawRoute(null);
+    showRoute({ push: false });
+    return;
+  }
+
+  app.route.result = {
+    kind: 'ok',
+    ...primary,
+    detour: shortest ? primary.miles / shortest.miles : null,
+  };
+  drawRoute(primary);
+  showRoute({ push: false });
+  announce(`Route found: ${primary.miles.toFixed(1)} miles.`);
+}
+
+/** Island number for a graph node, read off the segments it belongs to. */
+function islandOf(node) {
+  const g = app.graph;
+  if (!g) return null;
+  for (let k = g.head[node]; k < g.head[node + 1]; k++) {
+    const f = app.featuresById.get(g.eId[g.via[k]]);
+    if (f && f.properties.isl != null) return f.properties.isl;
+  }
+  return null;
+}
+
+/** Draw the route from geometry already in memory, keyed by feature id. */
+function drawRoute(result) {
+  if (!result) {
+    setRoute(app.map, null);
+    return;
+  }
+  const features = [];
+  for (const id of result.featureIds) {
+    const f = app.featuresById.get(id);
+    if (f) {
+      features.push({
+        type: 'Feature',
+        properties: { lts: f.properties.lts },
+        geometry: f.geometry,
+      });
+    }
+  }
+  setRoute(app.map, { type: 'FeatureCollection', features });
+}
+
+function setRoutePoint(which, lngLat) {
+  app.route[which] = { lng: lngLat.lng, lat: lngLat.lat };
+  app.route.picking = which === 'from' && !app.route.to ? 'to' : null;
+  setRouteEndpoints(app.map, [
+    app.route.from && { ...app.route.from, role: 'from' },
+    app.route.to && { ...app.route.to, role: 'to' },
+  ]);
+  recomputeRoute();
+}
 
 /* -------------------------------------------------------------- selection */
 
@@ -255,6 +429,12 @@ function installInteraction(map) {
   });
 
   map.on('click', (ev) => {
+    // While picking route endpoints the map click means "here", not "what is
+    // this street".
+    if (app.state.view === 'route' && app.route.picking) {
+      setRoutePoint(app.route.picking, ev.lngLat);
+      return;
+    }
     // A 2.6px residential line is unhittable with a fingertip at the default
     // tolerance, so coarse pointers get a 24px target.
     const pad = isCoarsePointer() ? 12 : 4;
@@ -319,6 +499,7 @@ async function boot() {
 
   const map = createMap(manifest, app.state);
   app.map = map;
+  app.manifest = manifest;
 
   // Capture what the URL asked for before anything overwrites it: showLegend()
   // sets state.view = 'legend', so by the time the data has loaded the original
@@ -347,6 +528,7 @@ async function boot() {
   map.on('load', async () => {
     addSources(map, manifest);
     addLayers(map);
+    addRouteLayers(map);
 
     for (const lts of LTS_ORDER_LEGEND) {
       if (!app.state.lts.has(lts)) setLtsVisible(map, lts, false);
