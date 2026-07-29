@@ -65,6 +65,44 @@ def test_edge_ids_resolve_to_drawable_features(graph):
     assert not missing, f"{len(missing)} routable edges have no drawable geometry"
 
 
+def test_trails_can_be_joined_partway_along(graph):
+    """A path must not be one long edge.
+
+    Off-road paths used to attach to the street network only at their two
+    extremities, which made each one a single graph edge -- enterable at one end
+    and leavable at the other, and nowhere else. 34 of 39 path miles were
+    unusable for anything but end-to-end travel, and routes went the long way
+    round rather than use a trail passing metres from the destination.
+    """
+    fac = {}
+    for name in ("network.geojson", "context.geojson", "residential.geojson"):
+        for f in json.loads((DATA / name).read_text())["features"]:
+            fac[f["id"]] = f["properties"].get("fac", 0)
+
+    degree: dict[int, int] = {}
+    for u, v, *_ in graph["edges"]:
+        degree[u] = degree.get(u, 0) + 1
+        degree[v] = degree.get(v, 0) + 1
+
+    path_edges = [e for e in graph["edges"] if fac.get(e[2]) == 6]
+    assert path_edges, "no shared-use paths in the routing graph"
+
+    # A junction is an endpoint shared with something else.
+    joined = [e for e in path_edges
+              if degree.get(e[0], 0) > 1 and degree.get(e[1], 0) > 1]
+    share = len(joined) / len(path_edges)
+    assert share > 0.6, (
+        f"only {share:.0%} of path edges are joined at both ends; "
+        "trails are probably attaching at their extremities only"
+    )
+
+    longest = max(e[3] for e in path_edges)
+    assert longest < 3.0, (
+        f"longest single path edge is {longest:.2f} mi with no intermediate "
+        "junction; a rider cannot join it partway"
+    )
+
+
 def test_the_low_stress_network_is_actually_routable(graph):
     """Guards the premise of the whole feature: if LTS 1-2 edges did not form
     substantial connected components, "plan a comfortable route" could never

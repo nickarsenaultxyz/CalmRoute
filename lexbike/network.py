@@ -92,7 +92,7 @@ def split_for_connectors(
         dists = [d for d in dists if 1e-6 < d < line.length - 1e-6]
         if not dists:
             continue
-        pieces = _cut(line, dists)
+        pieces = cut_line(line, dists)
         if len(pieces) < 2:
             continue
         keep_rows.append(pos)
@@ -135,7 +135,7 @@ def _as_point(xy):
     return Point(xy)
 
 
-def _cut(line: LineString, dists: list[float]) -> list[LineString]:
+def cut_line(line: LineString, dists: list[float]) -> list[LineString]:
     """Split ``line`` at the given along-line distances."""
     coords = list(line.coords)
     pieces: list[LineString] = []
