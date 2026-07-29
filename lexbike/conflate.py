@@ -329,6 +329,93 @@ def _check_mileage(
 #  Off-road paths and their connectors
 # ---------------------------------------------------------------------------
 
+def _find_attachments(part, candidates, tree, max_m, spacing_m):
+    """Points along a path where it can join another line.
+
+    Returns ``[(distance_along_path, snapped_point_on_target, target_index)]``.
+
+    Three properties this needs, each learned by getting it wrong:
+
+    *Every* nearby target, not just the closest. A trail running between two
+    streets must join both; querying only the nearest silently picks one and
+    leaves the other unreachable.
+
+    Thinning per target, not by distance along the path. Blind thinning to one
+    attachment per ``spacing_m`` drops whichever junction happens to fall inside
+    the window -- including the one a route needed. Instead each target gets its
+    single closest attachment, so a path beside a long road connects once, while
+    a path crossing five roads in 100 m connects five times.
+
+    Endpoints always attach if anything is in range. A trail's ends are where it
+    most obviously meets the network, and they must never be thinned away.
+    """
+    coords = list(part.coords)
+    if len(coords) < 2:
+        return []
+
+    # target index -> (gap, distance_along, snapped point)
+    best: dict[int, tuple[float, float, Point]] = {}
+
+    for idx, (x, y) in enumerate(coords):
+        pt = Point(x, y)
+        # Every candidate within reach, not merely the nearest one.
+        for k in tree.query(pt.buffer(max_m)):
+            k = int(k)
+            line = candidates.geometry.values[k]
+            gap = line.distance(pt)
+            if gap > max_m:
+                continue
+            is_end = idx == 0 or idx == len(coords) - 1
+            # An endpoint outranks a mid-path vertex for the same target.
+            score = gap - (max_m if is_end else 0.0)
+            prior = best.get(k)
+            if prior is None or score < prior[0]:
+                best[k] = (score, part.project(pt),
+                           line.interpolate(line.project(pt)), pt)
+
+    found = [(along, snapped, k, src) for k, (_, along, snapped, src) in best.items()]
+    found.sort(key=lambda t: t[0])
+
+    # A final light thin, only between attachments to *different* targets that
+    # land in essentially the same place, which would add a node and no reach.
+    out = []
+    for item in found:
+        if out and item[0] - out[-1][0] < spacing_m:
+            continue
+        out.append(item)
+    return out
+
+
+def _find_path_junctions(part, self_index, off, path_tree, max_m):
+    """Points where this path comes close to a *different* path.
+
+    Returns the same shape as :func:`_find_attachments`, with the target index
+    negated so the caller can tell a path target from a street target. Cutting
+    both paths at the meeting point is what lets a route turn from one trail
+    onto another.
+    """
+    if path_tree is None:
+        return []
+    out = []
+    seen: set[int] = set()
+    coords = list(part.coords)
+    for x, y in coords:
+        pt = Point(x, y)
+        for k in path_tree.query(pt.buffer(max_m)):
+            k = int(k)
+            if k == self_index or k in seen:
+                continue
+            other = off.geometry.values[k]
+            if other.distance(pt) > max_m:
+                continue
+            seen.add(k)
+            out.append((part.project(pt),
+                        other.interpolate(other.project(pt)),
+                        -(k + 1),
+                        pt))
+    return out
+
+
 def build_off_road(
     streets: gpd.GeoDataFrame,
     facilities: gpd.GeoDataFrame,
@@ -337,12 +424,27 @@ def build_off_road(
     """Return (off-road path features, connector features).
 
     Off-road paths are the only geometry outside the centreline layer, because
-    they genuinely are not streets. Each path endpoint within
-    ``conflation.connector_max_m`` of a centreline endpoint gets a short
-    connector edge, so routing can leave the street network onto a trail without
-    the route appearing to teleport.
+    they genuinely are not streets.
+
+    Attachment happens ALONG a path, not only at its two ends. Attaching only at
+    the ends leaves a trail as a single graph edge: a router can enter it at one
+    extremity and leave at the other, and nowhere else. Measured on this data
+    that made 34.3 of 38.8 path miles unusable for anything but end-to-end
+    travel -- the longest trail was a single 4.96-mile edge -- while 188 points
+    along those trails sat within 25 m of a street a rider could obviously join.
+    Routes went the long way round rather than use a trail passing metres from
+    the destination.
+
+    So every vertex within ``conflation.connector_max_m`` of an eligible
+    centreline is a candidate junction, thinned to one per
+    ``conflation.attach_spacing_m`` so a trail running parallel to a street does
+    not sprout a connector at every vertex. The path is cut at each surviving
+    point, which is what turns it into something a route can join partway along.
     """
+    from .network import cut_line
+
     max_m = float(params["conflation.connector_max_m"])
+    spacing_m = float(params["conflation.attach_spacing_m"])
     excluded = set(int(x) for x in params["conflation.exclude_rdclass"])
 
     st = io.to_working_crs(streets, params).reset_index(drop=True)
@@ -359,64 +461,89 @@ def build_off_road(
     # be joined to it.
     candidates = st[~st["rdclass"].isin(excluded)].reset_index(drop=True)
     tree = STRtree(candidates.geometry.values)
+
+    # Paths are targets too. Two trails meeting is a junction a rider uses, and
+    # attaching only to streets left 33 pairs of trails touching within 8 m
+    # while sharing no node -- so a route could not turn from one onto the other.
+    path_geoms = list(off.geometry.values)
+    path_tree = STRtree(path_geoms) if path_geoms else None
     log.info(
         "off-road: %d paths, snapping to %d eligible centrelines (max %.0f m)",
         len(off), len(candidates), max_m,
     )
 
     connectors: list[dict] = []
-    attached = 0
-    endpoints_total = 0
+    path_rows: list[dict] = []
+    attach_count = 0
 
     for i, geom in enumerate(off.geometry):
-        parts = getattr(geom, "geoms", [geom])
-        ends: list[tuple[float, float]] = []
-        for part in parts:
-            coords = list(part.coords)
-            if coords:
-                ends.append(coords[0])
-                ends.append(coords[-1])
-        for end in ends:
-            endpoints_total += 1
-            pt = Point(end)
-            nearest = np.atleast_1d(tree.query_nearest(pt))
-            if nearest.size == 0:
+        template = off.iloc[i].to_dict()
+        for part in getattr(geom, "geoms", [geom]):
+            if part.length <= 0:
                 continue
-            k = int(nearest[0])
-            line = candidates.geometry.values[k]
-            dist = line.distance(pt)
-            if dist > max_m:
-                continue
-            # Project onto the line so the connector is perpendicular-ish and the
-            # split point is well defined.
-            snapped = line.interpolate(line.project(pt))
-            attached += 1
-            if dist < 1e-9:
-                continue  # already touching; no connector geometry needed
-            connectors.append(
-                {
-                    "geometry": LineString([end, (snapped.x, snapped.y)]),
+            attachments = _find_attachments(
+                part, candidates, tree, max_m, spacing_m)
+            attachments += _find_path_junctions(
+                part, i, off, path_tree, max_m)
+            # One list, sorted, so the cut points below stay in order.
+            attachments.sort(key=lambda t: t[0])
+            attach_count += len(attachments)
+
+            # Cut the path at every interior attachment so those points become
+            # real nodes. Endpoints need no cut; they already are nodes.
+            interior = sorted(
+                d for d, _, _, _ in attachments if 1e-6 < d < part.length - 1e-6)
+            pieces = cut_line(part, interior) if interior else [part]
+            for piece in pieces:
+                row = dict(template)
+                row["geometry"] = piece
+                path_rows.append(row)
+
+            for dist_along, snapped, street_idx, source_pt in attachments:
+                # Use the vertex the match was found at, NOT
+                # part.interpolate(dist_along). `project` is ambiguous where a
+                # path doubles back on itself, so round-tripping through the
+                # along-distance can land on a completely different part of the
+                # trail -- which produced a 1,476 m "connector", a phantom
+                # low-stress shortcut across the city.
+                on_path = source_pt
+                gap = on_path.distance(snapped)
+                if gap < 1e-9:
+                    continue     # already coincident; no connector geometry needed
+                if gap > max_m:
+                    # Belt and braces: nothing beyond the search radius can be a
+                    # short link, whatever the geometry did.
+                    continue
+                to_path = street_idx < 0
+                connectors.append({
+                    "geometry": LineString(
+                        [(on_path.x, on_path.y), (snapped.x, snapped.y)]),
                     "fac": "connector",
-                    "length_m": float(dist),
+                    "length_m": float(gap),
                     "path_row": i,
-                    "split_street_id": int(candidates.at[k, "id"]),
+                    # A path-to-path connector has no centreline to split; the
+                    # -1 sentinel tells network.split_for_connectors to skip it.
+                    "split_street_id": -1 if to_path
+                                       else int(candidates.at[street_idx, "id"]),
                     "split_x": float(snapped.x),
                     "split_y": float(snapped.y),
-                }
-            )
+                })
 
     log.info(
-        "off-road: attached %d of %d path endpoints within %.0f m (%d connectors drawn)",
-        attached, endpoints_total, max_m, len(connectors),
+        "off-road: %d paths -> %d pieces, %d attachment points, %d connectors "
+        "(max %.0f m, one per %.0f m)",
+        len(off), len(path_rows), attach_count, len(connectors), max_m, spacing_m,
     )
-    if endpoints_total and attached == 0:
+    if len(off) and attach_count == 0:
         raise ConflationError(
-            "no off-road path endpoint attached to the street network; "
+            "no off-road path attached to the street network; "
             "check conflation.connector_max_m"
         )
 
     crs = st.crs
-    paths_out = off.copy()
+    paths_out = gpd.GeoDataFrame(path_rows, geometry="geometry", crs=crs) \
+        if path_rows else off.copy()
+    paths_out = paths_out.reset_index(drop=True)
     paths_out["id"] = PATH_ID_BASE + np.arange(len(paths_out), dtype="int64")
     paths_out["kind"] = "facility"
 

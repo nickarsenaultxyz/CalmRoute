@@ -162,6 +162,34 @@ not measurements."""
 
 
 # ---------------------------------------------------------------------------
+#  Known coverage gap in the source street data
+# ---------------------------------------------------------------------------
+#
+#  LFUCG's centreline file does not contain every street. Measured against
+#  OpenStreetMap in three sampled areas (Kenwick, UK/south, north Lexington),
+#  22 of 375 named non-service streets were absent -- 3% to 8% by area.
+#  White Ave, Commonwealth Dr and Brooks St are examples.
+#
+#  This is disclosed rather than filled. Importing OSM geometry would supply
+#  the shape of a missing street but none of its posted speed or road class,
+#  so it could not be rated: assuming a comfortable rating invents one, and
+#  assuming a stressful rating leaves the router avoiding it exactly as it does
+#  now. It would also reintroduce the two-differently-noded-networks problem
+#  that the centreline-canonical design exists to remove.
+#
+#  The practical effect is that a route may detour around a street that exists.
+
+[coverage]
+sampled_areas = 3
+osm_named_streets = 375
+missing_from_lfucg = 22
+note = """LFUCG's street file is missing about 6% of named streets (measured \
+against OpenStreetMap across three sampled areas). A missing street cannot be \
+rated or routed over, so a route may occasionally detour around one that \
+exists."""
+
+
+# ---------------------------------------------------------------------------
 #  LTS thresholds
 # ---------------------------------------------------------------------------
 #
@@ -265,6 +293,12 @@ max_inflation = 1.45
 
 connector_max_m = 25.0         # 162 of 254 off-road endpoints connect at 25 m
 
+# Minimum gap between attachment points along one path. Every vertex within
+# connector_max_m of a street is a candidate junction; without thinning, a trail
+# running parallel to a road sprouts a connector at every vertex and bloats the
+# graph without adding a useful junction.
+attach_spacing_m = 120.0
+
 
 # ---------------------------------------------------------------------------
 #  Connectivity
@@ -321,7 +355,11 @@ simplify_residential = 0.00003
 "network.geojson" = 90         # critical path: built facilities only
 "context.geojson" = 200        # busy/prohibited roads, fetched right after
 "residential.geojson" = 420    # quiet streets, deferred to idle or z>=13
-"graph.json" = 200
+# Raised from 200 when off-road paths gained interior junctions. The graph grew
+# because it became correct: trails were previously single edges enterable only
+# at their extremities, so 34 of 39 path miles were unusable for anything but
+# end-to-end travel.
+"graph.json" = 250
 "planned.geojson" = 20
 "council.json" = 6
 "islands.json" = 30

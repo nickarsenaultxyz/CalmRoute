@@ -41,7 +41,7 @@ def frame(rows, crs="EPSG:4326"):
 
 def test_cut_splits_at_one_point():
     line = LineString([(0, 0), (10, 0)])
-    pieces = net._cut(line, [4.0])
+    pieces = net.cut_line(line, [4.0])
     assert len(pieces) == 2
     assert pieces[0].length == pytest.approx(4.0)
     assert pieces[1].length == pytest.approx(6.0)
@@ -49,7 +49,7 @@ def test_cut_splits_at_one_point():
 
 def test_cut_preserves_total_length():
     line = LineString([(0, 0), (5, 0), (5, 5), (10, 5)])
-    pieces = net._cut(line, [2.0, 7.0, 11.0])
+    pieces = net.cut_line(line, [2.0, 7.0, 11.0])
     assert len(pieces) == 4
     assert sum(p.length for p in pieces) == pytest.approx(line.length)
 
@@ -58,14 +58,14 @@ def test_cut_pieces_join_end_to_end():
     """Adjacent pieces must share an exact coordinate, or splitting would create
     the very disconnection it exists to prevent."""
     line = LineString([(0, 0), (10, 0), (10, 10)])
-    pieces = net._cut(line, [3.0, 14.0])
+    pieces = net.cut_line(line, [3.0, 14.0])
     for a, b in zip(pieces, pieces[1:]):
         assert a.coords[-1] == b.coords[0]
 
 
 def test_cut_ignores_degenerate_distances():
     line = LineString([(0, 0), (10, 0)])
-    assert len(net._cut(line, [])) == 1
+    assert len(net.cut_line(line, [])) == 1
 
 
 # ---------------------------------------------------------------------------

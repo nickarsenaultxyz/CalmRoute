@@ -270,8 +270,20 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
 
     Mileage everywhere, not segment counts: segment length spans two orders of
     magnitude, so counts would be a misleading public metric.
+
+    Connectors are excluded from every mileage figure. They are synthetic links
+    joining a trail to the street beside it -- 1,483 of them, median 49 ft --
+    and counting them as ridable network would have added 12.8 miles of
+    infrastructure nobody built to the "Relaxed" total.
     """
     rules = lts_mod.Ruleset.from_params(params)
+    real = edges[edges["fac"] != "connector"] if "fac" in edges.columns else edges
+    connector_mi = (
+        io.to_working_crs(edges[edges["fac"] == "connector"], params)
+        .geometry.length.sum() / METRES_PER_MILE
+        if "fac" in edges.columns else 0.0
+    )
+    edges = real
     miles = io.to_working_crs(edges, params).geometry.length / METRES_PER_MILE
     labels = params["lts.labels"]
 
@@ -304,6 +316,7 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
         "ruleset_version": params["meta.ruleset_version"],
         "params_digest": params.digest,
         "total_miles": round(float(miles.sum()), 1),
+        "connector_miles_excluded": round(float(connector_mi), 1),
         "by_lts": by_lts,
         "low_stress": {
             "max_lts": rules.low_stress_max,
@@ -334,7 +347,17 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
             "aadt_measured_segments": extra.get("aadt_measured", 0),
             "aadt_measured_pct": extra.get("aadt_measured_pct", 0.0),
         },
+        "coverage": {
+            "sampled_areas": params.get("coverage.sampled_areas"),
+            "osm_named_streets": params.get("coverage.osm_named_streets"),
+            "missing_from_lfucg": params.get("coverage.missing_from_lfucg"),
+            "missing_pct": round(
+                100 * params["coverage.missing_from_lfucg"]
+                / params["coverage.osm_named_streets"], 1)
+            if params.get("coverage.osm_named_streets") else None,
+        },
         "limitations": [
+            params["coverage.note"],
             "Traffic counts exist only on state-maintained routes, so volumes for "
             "most local streets are imputed from class medians and are estimates.",
             "Lane counts are not in any source; they are inferred from road class, "

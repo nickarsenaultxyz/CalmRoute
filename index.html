@@ -61,6 +61,50 @@
 </noscript>
 
 <script src="./assets/vendor/maplibre-gl-5.24.0.js"></script>
+
+<!--
+  Watchdog, in a classic script on purpose.
+
+  A module that fails to LINK -- a missing export, typically because a browser
+  is holding one cached file against a newer one after a deploy -- throws before
+  any module code runs. No try/catch inside main.js can see it, and the page
+  sits on a spinner forever saying nothing. This is the only place that failure
+  can be caught.
+-->
+<script>
+(function () {
+  var problem = null;
+  addEventListener('error', function (e) {
+    if (e && e.message && !problem) problem = e.message;
+  }, true);
+
+  setTimeout(function () {
+    if (window.__lexbikeBooted) return;
+    var chip = document.getElementById('loading');
+    if (chip) chip.setAttribute('hidden', '');
+    var body = document.getElementById('panel-body');
+    if (!body) return;
+    var stale = /export named|is not a function|Failed to fetch dynamically/i
+      .test(problem || '');
+    body.innerHTML =
+      '<p class="note">' + (stale
+        ? 'Your browser is holding an old copy of this page. A hard refresh ' +
+          'should fix it.'
+        : 'The map did not finish starting.') + '</p>' +
+      '<div class="share-actions"><button class="btn primary" id="hard-reload">' +
+      'Reload</button></div>' +
+      (problem ? '<p class="tech">' + problem.replace(/[&<>]/g, '') + '</p>' : '') +
+      '<p class="tech">The data is open either way: ' +
+      '<a href="./data/network.geojson">network.geojson</a>.</p>';
+    var btn = document.getElementById('hard-reload');
+    if (btn) btn.onclick = function () {
+      // Cache-bust the document so the module graph is re-fetched too.
+      location.replace(location.pathname + '?cb=' + Date.now());
+    };
+  }, 15000);
+})();
+</script>
+
 <script type="module" src="./js/main.js"></script>
 </body>
 </html>

@@ -65,6 +65,12 @@ Known limitations, also published in `data/methodology.json`:
   status and cartographic class, and shipped as a property so you can audit it.
 - On-street parking and bike lane width are not modelled — neither is recorded.
 - Ratings describe **built** infrastructure only. Funded projects are separate.
+- **LFUCG's street file is missing about 6% of named streets** — 22 of 375
+  across three sampled areas, measured against OpenStreetMap. A street that is
+  not in the data cannot be rated or routed over, so a route may detour around
+  one that exists. Not filled from OSM: imported geometry would carry no posted
+  speed or road class, so assuming a comfortable rating invents one and assuming
+  a stressful one leaves the router avoiding it anyway.
 
 ## Usage
 
@@ -210,6 +216,28 @@ Nothing is sent automatically — it opens a new message in your mail app. If th
 district layer is unavailable at build time, or a street falls outside the
 district boundaries (19 of 14,169 do), the map says so and links to the
 council's contact page rather than guessing.
+
+## Planning a route
+
+Pick two points and the map routes you over quiet streets, going further to
+avoid busy ones. It reports the trade honestly: total distance, how much longer
+that is than the direct line, and how much of it is still on a busy road —
+drawn in red so you see the compromise before you set off.
+
+Tick **only quiet streets** and it will refuse rather than compromise. That
+refusal is the most useful screen in the tool:
+
+> There's no comfortable route between these two places. Your start and
+> destination sit on different low-stress islands (#0 and #1). The quiet
+> streets are there; they just don't join up.
+>
+> The best available route is 4.06 mi and uses 0.38 mi of busy road.
+
+All of it runs in the browser. Nothing about routing is precomputed — an
+all-pairs structure over 10,842 nodes would be 117 million pairs and still could
+not answer a question with an adjustable stress threshold. A Dijkstra over the
+whole network takes **under a millisecond**, so it is cheaper to just run one:
+graph build 7 ms, query 0.2–0.8 ms, measured on the real network.
 
 ## Where the gaps are
 

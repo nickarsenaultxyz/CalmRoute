@@ -317,3 +317,49 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 }
 
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------- route */
+
+.points { margin: 12px 0; }
+
+.point-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  min-height: 52px; padding: 8px; margin: 0 0 4px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.point-row:hover { background: var(--bg); }
+.point-row[aria-pressed="true"] {
+  border-color: var(--accent); box-shadow: 0 0 0 2px rgba(29, 78, 216, .15);
+}
+.point-row .pin {
+  flex: 0 0 auto; width: 14px; height: 14px; border-radius: 50%;
+  border: 3px solid #fff; box-shadow: 0 0 0 1px var(--line);
+}
+.point-row .pin.from { background: #16a34a; }
+.point-row .pin.to { background: #dc2626; }
+.point-row .label { flex: 1 1 auto; min-width: 0; }
+.point-row .label b { display: block; font-size: 13px; }
+.point-row .label span {
+  display: block; font-size: 13px; color: var(--ink-soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.point-row .clear {
+  flex: 0 0 auto; font-size: 12px; color: var(--accent); padding: 6px;
+}
+
+.check {
+  display: flex; gap: 9px; align-items: flex-start;
+  margin: 14px 0 0; font-size: 13px; color: var(--ink-soft); cursor: pointer;
+}
+.check input { margin-top: 2px; flex: 0 0 auto; }
+
+.verdict {
+  margin: 16px 0 0; padding: 12px; border-radius: 8px;
+  border-left: 4px solid var(--line); background: var(--bg);
+}
+.verdict b { display: block; font-size: 15px; margin-bottom: 2px; }
+.verdict span { display: block; font-size: 13px; color: var(--ink-soft); }
+.verdict.good { border-left-color: var(--lts1); }
+.verdict.warn { border-left-color: var(--lts3); }
+.verdict.bad  { border-left-color: var(--lts4); }

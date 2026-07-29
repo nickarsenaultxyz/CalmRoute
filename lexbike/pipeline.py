@@ -277,18 +277,21 @@ def write_artifacts(
     # Per-layer totals, so the legend can label the residential toggle with a
     # real figure instead of deriving one in JavaScript and risking drift.
     metres = io.to_working_crs(edges, params).geometry.length
+    # Same reason as build_stats: a synthetic link is not ridable network.
+    not_conn = edges["fac"] != "connector"
     stats["layers"] = {
         name: {
-            "features": len(frame),
-            "miles": round(float(metres[frame.index].sum()) / 1609.344, 1),
+            "features": int(not_conn[frame.index].sum()),
+            "miles": round(
+                float(metres[frame.index[not_conn[frame.index]]].sum()) / 1609.344, 1),
             # Per-LTS too, so the legend can report the mileage actually on
             # screen. With the residential layer off by default, a legend row
             # reading "701 mi" beside a handful of visible blue lines is worse
             # than no number at all.
             "by_lts": {
-                str(int(level)): round(
-                    float(metres[frame.index[frame["lts"] == level]].sum()) / 1609.344, 1
-                )
+                str(int(level)): round(float(metres[frame.index[
+                    (frame["lts"] == level) & (frame["fac"] != "connector")
+                ]].sum()) / 1609.344, 1)
                 for level in sorted(frame["lts"].unique())
             },
         }

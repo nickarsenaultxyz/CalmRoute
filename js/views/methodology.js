@@ -74,6 +74,11 @@ export function render(methodology, stats) {
 
     <h2 class="section">What this does not know</h2>
     <ul class="plain">${limits}</ul>
+    ${stats?.coverage?.missing_pct ? `<p class="tech">The coverage figure was
+      measured by comparing the city's street file against OpenStreetMap across
+      ${stats.coverage.sampled_areas} sampled areas:
+      ${stats.coverage.missing_from_lfucg} of
+      ${stats.coverage.osm_named_streets} named streets were absent.</p>` : ''}
 
     <h2 class="section">Sources</h2>
     <p class="tech">

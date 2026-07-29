@@ -72,7 +72,10 @@ def split_for_connectors(
 
     wanted: dict[int, list[tuple[float, float]]] = defaultdict(list)
     for _, row in connectors.iterrows():
-        wanted[int(row["split_street_id"])].append((row["split_x"], row["split_y"]))
+        street_id = int(row["split_street_id"])
+        if street_id < 0:
+            continue      # path-to-path connector; no centreline to split
+        wanted[street_id].append((row["split_x"], row["split_y"]))
 
     st_m = io.to_working_crs(streets, params)
     by_id = {int(v): i for i, v in enumerate(streets["id"].values)}
@@ -92,7 +95,7 @@ def split_for_connectors(
         dists = [d for d in dists if 1e-6 < d < line.length - 1e-6]
         if not dists:
             continue
-        pieces = _cut(line, dists)
+        pieces = cut_line(line, dists)
         if len(pieces) < 2:
             continue
         keep_rows.append(pos)
@@ -135,7 +138,7 @@ def _as_point(xy):
     return Point(xy)
 
 
-def _cut(line: LineString, dists: list[float]) -> list[LineString]:
+def cut_line(line: LineString, dists: list[float]) -> list[LineString]:
     """Split ``line`` at the given along-line distances."""
     coords = list(line.coords)
     pieces: list[LineString] = []

@@ -2,12 +2,14 @@
 
 import { LTS, LTS_ORDER_LEGEND } from './config.js';
 import {
-  deferResidential, loadContext, loadCouncil, loadManifest, loadMethodology,
-  loadNetwork, loadStats,
+  deferResidential, loadContext, loadCouncil, loadGraph, loadManifest,
+  loadMethodology, loadNetwork, loadStats,
 } from './data.js';
 import {
-  addLayers, addSources, hitLayers, setLtsVisible, setSourceVisible,
+  addConnectorLayer, addLayers, addRouteLayers, addSources, hitLayers, setLtsVisible,
+  setRoute, setRouteAccess, setRouteEndpoints, setSourceVisible,
 } from './layers.js';
+import { clipToEnd } from './lib/graph.js';
 import { announce, easeTo, isCoarsePointer } from './lib/a11y.js';
 import { debounce, onPopState, read, write } from './lib/urlstate.js';
 import { checkSupport, createMap, setBasemap } from './map.js';
@@ -16,6 +18,7 @@ import * as browse from './views/browse.js';
 import * as detail from './views/detail.js';
 import * as legend from './views/legend.js';
 import * as methodology from './views/methodology.js';
+import * as routeView from './views/route.js';
 import * as settings from './views/settings.js';
 import * as share from './views/share.js';
 
@@ -35,6 +38,8 @@ const app = window.__lexbike = {
   featuresById: new Map(),
   selected: null,
   hovered: null,
+  graph: null,
+  route: { from: null, to: null, strict: false, picking: 'from', result: null },
 };
 
 function setLoading(text) {
@@ -96,6 +101,7 @@ function openView(view, { push = true } = {}) {
   if (view === 'share') return showShare({ push });
   if (view === 'style') return showSettings({ push });
   if (view === 'methodology') return showMethodology({ push });
+  if (view === 'route') return showRoute({ push });
   return showLegend({ push });
 }
 
@@ -169,6 +175,48 @@ function showMethodology({ push = true } = {}) {
   write(app.state, { push });
 }
 
+function showRoute({ push = true } = {}) {
+  app.state.view = 'route';
+  const body = app.panel.show({
+    title: 'Plan a route',
+    html: routeView.render(app.route, app.stats),
+  });
+  routeView.mount(body, {
+    onPick: (which) => {
+      app.route.picking = app.route.picking === which ? null : which;
+      announce(app.route.picking
+        ? `Tap the map to set the ${which === 'from' ? 'start' : 'destination'}.`
+        : 'Cancelled.');
+      showRoute({ push: false });
+    },
+    onClear: (which) => { app.route[which] = null; recomputeRoute(); },
+    onClearBoth: () => {
+      app.route.from = app.route.to = null;
+      app.route.result = null;
+      app.route.picking = 'from';
+      drawRoute(null);
+      showRoute({ push: false });
+    },
+    onSwap: () => {
+      const t = app.route.from;
+      app.route.from = app.route.to;
+      app.route.to = t;
+      recomputeRoute();
+    },
+    onStrict: (on) => { app.route.strict = on; recomputeRoute(); },
+    onAccept: () => {
+      // Draw the compromised route the rider explicitly asked to see.
+      if (app.route.fallbackResult) {
+        app.route.result = { kind: 'ok', ...app.route.fallbackResult };
+        drawRoute(app.route.fallbackResult);
+        showRoute({ push: false });
+      }
+    },
+    onNav: (view) => openView(view, { push: true }),
+  });
+  write(app.state, { push });
+}
+
 function showSettings({ push = true } = {}) {
   app.state.view = 'style';
   const body = app.panel.show({
@@ -211,6 +259,241 @@ function showDetail(feature, { push = true } = {}) {
 const detailRatingWord = (lts) =>
   ({ 0: 'bikes not permitted', 1: 'relaxed', 2: 'comfortable for most adults',
      3: 'busy', 4: 'stressful' }[lts] || 'unknown');
+
+/* ---------------------------------------------------------------- routing */
+
+/** Load the graph and build the CSR structure once, on first use. */
+async function ensureGraph() {
+  if (app.graph) return app.graph;
+  if (!app.graphPromise) {
+    // The route is drawn from geometry already in memory, keyed by feature id,
+    // so every layer the route can traverse must be loaded -- not necessarily
+    // visible. Without this the quiet-street portions of a route have no
+    // geometry and the line renders as disconnected fragments.
+    app.graphPromise = Promise.all([
+      loadGraph(app.manifest),
+      app.residential ? app.residential.ensure() : null,
+    ]).then(async ([raw]) => {
+      const { buildGraph, components } = await import('./lib/graph.js');
+      app.graph = buildGraph(raw);
+      // Island labels answer "is a comfortable route even possible" before a
+      // search runs, so the failure message can name both islands.
+      app.lowStressLabels = components(app.graph, 2);
+      return app.graph;
+    });
+  }
+  return app.graphPromise;
+}
+
+async function recomputeRoute() {
+  const { from, to } = app.route;
+  if (!from || !to) {
+    app.route.result = null;
+    drawRoute(null);
+    showRoute({ push: false });
+    return;
+  }
+
+  app.route.result = { kind: 'pending' };
+  showRoute({ push: false });
+
+  const g = await ensureGraph();
+  const { snapToNetwork } = await import('./lib/graph.js');
+  const { route } = await import('./lib/dijkstra.js');
+
+  const geometryOf = (id) => app.featuresById.get(id)?.geometry?.coordinates;
+  const snapA = snapToNetwork(g, geometryOf, from.lng, from.lat);
+  const snapB = snapToNetwork(g, geometryOf, to.lng, to.lat);
+  if (!snapA || !snapB) {
+    app.route.result = { kind: 'none' };
+    drawRoute(null);
+    showRoute({ push: false });
+    return;
+  }
+  app.route.snapA = snapA;
+  app.route.snapB = snapB;
+
+  const strict = app.route.strict;
+  const primary = routeBetweenSnaps(g, route, snapA, snapB,
+    strict ? 'avoid' : 'comfort');
+  const shortest = routeBetweenSnaps(g, route, snapA, snapB, 'shortest');
+
+  if (!primary) {
+    // Distinguish "no comfortable route" from "not connected at all". The
+    // first is the finding; the second is a data gap.
+    const fallback = strict
+      ? routeBetweenSnaps(g, route, snapA, snapB, 'comfort') : null;
+    app.route.fallbackResult = fallback
+      ? { ...fallback, detour: shortest ? fallback.miles / shortest.miles : null }
+      : null;
+    const sameIsland = app.lowStressLabels
+      && app.lowStressLabels[snapA.u] === app.lowStressLabels[snapB.u];
+    app.route.result = (fallback || !sameIsland)
+      ? {
+          kind: 'blocked',
+          islandA: islandOf(snapA.u),
+          islandB: islandOf(snapB.u),
+          fallback: app.route.fallbackResult,
+        }
+      : { kind: 'none' };
+    drawRoute(null);
+    showRoute({ push: false });
+    return;
+  }
+
+  app.route.result = {
+    kind: 'ok',
+    ...primary,
+    detour: shortest ? primary.miles / shortest.miles : null,
+  };
+  drawRoute(primary);
+  showRoute({ push: false });
+  announce(`Route found: ${primary.miles.toFixed(1)} miles.`);
+}
+
+/**
+ * Route between two points snapped onto edges rather than onto nodes.
+ *
+ * The snap point usually sits partway along an edge, so the search has to
+ * consider leaving via either end of the start edge and arriving via either end
+ * of the destination edge -- four pairings -- charging the partial edge at each
+ * end. Picking the nearest node instead is what left the drawn route stopping
+ * short of the pin.
+ *
+ * Four searches still cost under 5 ms on this graph.
+ */
+function routeBetweenSnaps(g, route, snapA, snapB, mode) {
+  // Both points on the same edge: no search needed, just the piece between.
+  if (snapA.edge === snapB.edge) {
+    const frac = Math.abs(snapB.fraction - snapA.fraction);
+    const miles = g.eMi[snapA.edge] * frac;
+    const lts = g.eLts[snapA.edge];
+    if (mode === 'avoid' && (lts < 1 || lts > 2)) return null;
+    return {
+      edges: [snapA.edge], featureIds: [g.eId[snapA.edge]],
+      miles, stressMiles: lts > 2 ? miles : 0, worstLts: lts,
+      partial: { sameEdge: true },
+    };
+  }
+
+  const ends = (snap) => [
+    { node: snap.u, frac: snap.fraction },        // travelling back to u
+    { node: snap.v, frac: 1 - snap.fraction },    // travelling on to v
+  ];
+
+  let best = null;
+  for (const a of ends(snapA)) {
+    for (const b of ends(snapB)) {
+      const r = route(g, a.node, b.node, mode);
+      if (!r) continue;
+      // Charge the partial edge at each end so the comparison is fair.
+      const addA = g.eMi[snapA.edge] * a.frac;
+      const addB = g.eMi[snapB.edge] * b.frac;
+      const total = r.miles + addA + addB;
+      if (!best || total < best.total) best = { total, r, a, b, addA, addB };
+    }
+  }
+  if (!best) return null;
+
+  const { r, a, b, addA, addB } = best;
+  const ltsA = g.eLts[snapA.edge];
+  const ltsB = g.eLts[snapB.edge];
+  return {
+    edges: r.edges,
+    featureIds: r.featureIds,
+    miles: best.total,
+    stressMiles: r.stressMiles + (ltsA > 2 ? addA : 0) + (ltsB > 2 ? addB : 0),
+    worstLts: Math.max(r.worstLts, ltsA, ltsB),
+    partial: { startNode: a.node, endNode: b.node },
+  };
+}
+
+/** Island number for a graph node, read off the segments it belongs to. */
+function islandOf(node) {
+  const g = app.graph;
+  if (!g) return null;
+  for (let k = g.head[node]; k < g.head[node + 1]; k++) {
+    const f = app.featuresById.get(g.eId[g.via[k]]);
+    if (f && f.properties.isl != null) return f.properties.isl;
+  }
+  return null;
+}
+
+/**
+ * Draw the route from geometry already in memory, keyed by feature id.
+ *
+ * The two partial edges at the ends are clipped at the snap points, and a short
+ * dashed stub covers whatever is left between the pin and the network -- that
+ * last bit is real (you do have to get to the street somehow) and pretending
+ * otherwise would draw a route that starts in a field.
+ */
+function drawRoute(result) {
+  if (!result) {
+    setRoute(app.map, null);
+    setRouteAccess(app.map, null);
+    return;
+  }
+  const features = [];
+  const push = (coords, lts) => {
+    if (coords && coords.length > 1) {
+      features.push({
+        type: 'Feature',
+        properties: { lts },
+        geometry: { type: 'LineString', coordinates: coords },
+      });
+    }
+  };
+
+  const { snapA, snapB } = app.route;
+  const partial = result.partial || {};
+
+  if (partial.sameEdge && snapA && snapB) {
+    const lo = Math.min(snapA.alongDeg, snapB.alongDeg);
+    const hi = Math.max(snapA.alongDeg, snapB.alongDeg);
+    const first = snapA.alongDeg <= snapB.alongDeg ? snapA : snapB;
+    const last = first === snapA ? snapB : snapA;
+    push([[first.x, first.y], ...first.coords.slice(
+      first.vertexIndex + 1, last.vertexIndex + 1), [last.x, last.y]],
+      app.graph.eLts[snapA.edge]);
+  } else {
+    if (snapA) {
+      push(clipToEnd(snapA, partial.startNode === snapA.v),
+           app.graph.eLts[snapA.edge]);
+    }
+    for (const id of result.featureIds) {
+      const f = app.featuresById.get(id);
+      if (f) push(f.geometry.coordinates, f.properties.lts);
+    }
+    if (snapB) {
+      push(clipToEnd(snapB, partial.endNode === snapB.v),
+           app.graph.eLts[snapB.edge]);
+    }
+  }
+
+  setRoute(app.map, { type: 'FeatureCollection', features });
+
+  // The unavoidable remainder: pin to network.
+  const stubs = [];
+  for (const [pin, snap] of [[app.route.from, snapA], [app.route.to, snapB]]) {
+    if (!pin || !snap) continue;
+    stubs.push({
+      type: 'Feature', properties: {},
+      geometry: { type: 'LineString',
+                  coordinates: [[pin.lng, pin.lat], [snap.x, snap.y]] },
+    });
+  }
+  setRouteAccess(app.map, { type: 'FeatureCollection', features: stubs });
+}
+
+function setRoutePoint(which, lngLat) {
+  app.route[which] = { lng: lngLat.lng, lat: lngLat.lat };
+  app.route.picking = which === 'from' && !app.route.to ? 'to' : null;
+  setRouteEndpoints(app.map, [
+    app.route.from && { ...app.route.from, role: 'from' },
+    app.route.to && { ...app.route.to, role: 'to' },
+  ]);
+  recomputeRoute();
+}
 
 /* -------------------------------------------------------------- selection */
 
@@ -255,6 +538,12 @@ function installInteraction(map) {
   });
 
   map.on('click', (ev) => {
+    // While picking route endpoints the map click means "here", not "what is
+    // this street".
+    if (app.state.view === 'route' && app.route.picking) {
+      setRoutePoint(app.route.picking, ev.lngLat);
+      return;
+    }
     // A 2.6px residential line is unhittable with a fingertip at the default
     // tolerance, so coarse pointers get a 24px target.
     const pad = isCoarsePointer() ? 12 : 4;
@@ -286,6 +575,8 @@ const syncUrl = debounce(() => {
 /* ------------------------------------------------------------------- boot */
 
 async function boot() {
+  // Tells the watchdog in index.html that the module graph linked and ran.
+  window.__lexbikeBooted = true;
   if (!checkSupport()) return;
 
   app.panel = new Panel({ onBack: () => history.back() });
@@ -319,6 +610,7 @@ async function boot() {
 
   const map = createMap(manifest, app.state);
   app.map = map;
+  app.manifest = manifest;
 
   // Capture what the URL asked for before anything overwrites it: showLegend()
   // sets state.view = 'legend', so by the time the data has loaded the original
@@ -347,6 +639,8 @@ async function boot() {
   map.on('load', async () => {
     addSources(map, manifest);
     addLayers(map);
+    addConnectorLayer(map);
+    addRouteLayers(map);
 
     for (const lts of LTS_ORDER_LEGEND) {
       if (!app.state.lts.has(lts)) setLtsVisible(map, lts, false);
@@ -445,4 +739,37 @@ function restoreSelection(push = false) {
   }
 }
 
-boot();
+/**
+ * Never leave the spinner running.
+ *
+ * A throw anywhere in boot() used to leave the loading chip spinning forever
+ * with nothing in the console the reader can see. The commonest cause is a
+ * stale module: browsers cache ES modules hard, so after a deploy a reader can
+ * hold an old layers.js against a new main.js and the missing export takes the
+ * whole boot down.
+ */
+boot().catch((err) => {
+  console.error('boot failed', err);
+  setLoading(null);
+  const stale = /is not a function|has already been declared|Failed to fetch/i
+    .test(String(err && err.message));
+  app.panel?.show({
+    title: 'The map failed to start',
+    root: true,
+    html: `<p class="note">${stale
+      ? 'This usually means your browser is holding an old copy of the page. '
+        + 'A hard refresh should fix it.'
+      : 'Something went wrong while setting up the map.'}</p>
+      <div class="share-actions">
+        <button class="btn primary" onclick="location.reload(true)">Reload</button>
+      </div>
+      <p class="tech">${escapeHtmlLite(String(err && err.message || err))}</p>
+      <p class="tech">The data is open either way:
+        <a href="./data/network.geojson">network.geojson</a>.</p>`,
+  });
+});
+
+function escapeHtmlLite(s) {
+  return s.replace(/[&<>"]/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}

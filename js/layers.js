@@ -1,6 +1,6 @@
 /** Data layer construction and visibility. */
 
-import { LAYERS, LTS, SOURCES } from './config.js';
+import { FAC_CONNECTOR, LAYERS, LTS, SOURCES } from './config.js';
 
 export const layerId = (e) => `${e.src}-lts${e.lts}`;
 
@@ -50,7 +50,12 @@ export function addLayers(map) {
     const style = LTS[entry.lts];
     const id = layerId(entry);
     const base = style.width * (entry.scale ?? 1);
-    const filter = ['==', ['get', 'lts'], entry.lts];
+    // Connectors are short synthetic links from a trail to the street it runs
+    // beside. Painted in the LTS 1 layer they read as real bike infrastructure
+    // -- 1,483 perpendicular green stubs, 49 ft median, that nobody built.
+    const filter = ['all',
+      ['==', ['get', 'lts'], entry.lts],
+      ['!=', ['coalesce', ['get', 'fac'], 0], FAC_CONNECTOR]];
 
     if (entry.casing) {
       map.addLayer({
@@ -98,6 +103,26 @@ export function addLayers(map) {
   }
 }
 
+/** Trail-to-street links, drawn as what they are: a hint that you can get
+ *  between the two here, not a facility. */
+export function addConnectorLayer(map) {
+  for (const src of SOURCES) {
+    const id = `${src}-connectors`;
+    if (map.getLayer(id) || !map.getSource(src)) continue;
+    map.addLayer({
+      id, type: 'line', source: src,
+      filter: ['==', ['coalesce', ['get', 'fac'], 0], FAC_CONNECTOR],
+      layout: { 'line-cap': 'butt' },
+      paint: {
+        'line-color': LTS[1].color,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.8, 17, 2],
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0, 15, 0.5],
+        'line-dasharray': [1, 1.5],
+      },
+    });
+  }
+}
+
 /** Every interactive layer, topmost first, so a click prefers what is drawn on top. */
 export function hitLayers(map) {
   return LAYERS
@@ -137,4 +162,85 @@ export function swatchSvg(lts) {
     <line x1="1" y1="6" x2="33" y2="6" stroke="${s.color}"
           stroke-width="${Math.max(3, s.width)}" stroke-linecap="butt"${dash}/>
   </svg>`;
+}
+
+
+/* ------------------------------------------------------------------- route */
+
+/**
+ * Route rendering: a bright casing, the line, and the stressful portion
+ * overpainted in red on top.
+ *
+ * The overpaint is the point. A router that quietly routes someone down an
+ * arterial and shows one uniform line has hidden the compromise it made; this
+ * makes the trade visible before they set off.
+ */
+export function addRouteLayers(map) {
+  if (map.getSource('route')) return;
+  const empty = { type: 'FeatureCollection', features: [] };
+  map.addSource('route', { type: 'geojson', data: empty });
+  map.addSource('route-endpoints', { type: 'geojson', data: empty });
+
+  map.addLayer({
+    id: 'route-casing', type: 'line', source: 'route',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': '#ffffff', 'line-width': 12, 'line-opacity': 0.95 },
+  });
+  map.addLayer({
+    id: 'route-line', type: 'line', source: 'route',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    // Near-black, NOT blue. The first attempt used #1d4ed8, which is a shade
+    // away from the LTS 2 blue it is drawn on top of -- the route was rendering
+    // correctly and was simply invisible against the network. Every hue in the
+    // LTS ramp is spoken for (green, blue, orange, red, grey) and violet is the
+    // planned-projects layer, so the route takes the one slot left.
+    paint: { 'line-color': '#111827', 'line-width': 6 },
+  });
+  map.addLayer({
+    id: 'route-stress', type: 'line', source: 'route',
+    filter: ['>', ['get', 'lts'], 2],
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': '#dc2626', 'line-width': 6 },
+  });
+  map.addSource('route-access', { type: 'geojson', data: empty });
+  map.addLayer({
+    id: 'route-access', type: 'line', source: 'route-access',
+    layout: { 'line-cap': 'round' },
+    paint: {
+      // Visible enough to read as "you have to get here yourself", distinct
+      // enough from the solid route not to be mistaken for part of the ride.
+      'line-color': '#111827', 'line-width': 3.5, 'line-opacity': 0.9,
+      'line-dasharray': [1.5, 1.5],
+    },
+  });
+  map.addLayer({
+    id: 'route-endpoints', type: 'circle', source: 'route-endpoints',
+    paint: {
+      'circle-radius': 8,
+      'circle-color': ['match', ['get', 'role'], 'from', '#16a34a', '#dc2626'],
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': 3,
+    },
+  });
+}
+
+export function setRoute(map, featureCollection) {
+  map.getSource('route')?.setData(
+    featureCollection || { type: 'FeatureCollection', features: [] });
+}
+
+export function setRouteAccess(map, featureCollection) {
+  map.getSource('route-access')?.setData(
+    featureCollection || { type: 'FeatureCollection', features: [] });
+}
+
+export function setRouteEndpoints(map, points) {
+  map.getSource('route-endpoints')?.setData({
+    type: 'FeatureCollection',
+    features: points.filter(Boolean).map((p) => ({
+      type: 'Feature',
+      properties: { role: p.role },
+      geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+    })),
+  });
 }
