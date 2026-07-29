@@ -25,7 +25,10 @@ async function getJSON(path) {
 }
 
 export async function loadManifest() {
-  const m = await getJSON(`${DATA_DIR}manifest.json`);
+  // The manifest is tiny and tells every other request which build to load.
+  // Give it a per-page URL so a browser or the Pages CDN cannot pair a fresh
+  // frontend with yesterday's artifact version.
+  const m = await getJSON(`${DATA_DIR}manifest.json?v=${Date.now()}`);
   m._url = (key) => `${DATA_DIR}${m.files[key]}?v=${encodeURIComponent(m.version)}`;
   return m;
 }

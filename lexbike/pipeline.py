@@ -305,7 +305,10 @@ def write_artifacts(
     bounds = edges.total_bounds
     export.write_json(
         {
-            "version": stats["generated"][:10],
+            # A date alone is not a cache key: multiple deploys on the same day
+            # caused browsers to keep the previous GeoJSON after a successful
+            # source refresh. The full build timestamp changes every run.
+            "version": stats["generated"],
             "generated": stats["generated"],
             "params_digest": params.digest,
             "bbox": [round(float(b), 5) for b in bounds],

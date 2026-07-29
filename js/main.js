@@ -6,7 +6,7 @@ import {
 import {
   deferResidential, loadContext, loadCouncil, loadGraph, loadManifest,
   loadMethodology, loadNetwork, loadStats,
-} from './data.js';
+} from './data.js?v=20260729-live-data-refresh';
 import {
   addConnectorLayer, addLayers, addRouteLayers, addSources, hitLayers, setLtsVisible,
   setRoute, setRouteAccess, setRouteEndpoints, setSourceVisible,
