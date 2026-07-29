@@ -21,7 +21,7 @@ coord_decimals = 5           # ~0.87 m at 38°N; see docs/sensitivity.md
 #
 #  IMPORTANT — only Type_Facility is used.
 #
-#  lexbike.geojson carries three facility-ish columns. We probed all 528 rows:
+#  Bicycle_Network_Master.geojson carries three facility-ish columns:
 #
 #    Type_Facility     the physical facility that exists on the ground
 #    Name_Facility     a Status-prefixed restatement of Type_Facility; it agrees
@@ -398,7 +398,7 @@ sensitivity_flip_forces_low = true
 [[sensitivity.runs]]
 name = "mixed_35mph_as_lts2"
 set = { "lts.mixed.speed_35_lts" = 2 }
-why = "Dominant parameter. Measured: largest island 52.9% vs 12.0%, 1,591 segments changed."
+why = "Dominant parameter. Measured: largest island 59.1% vs 18.3%, 1,601 segments changed."
 
 [[sensitivity.runs]]
 name = "aadt_break_2000"
@@ -413,7 +413,7 @@ why = "Upper bound on the same question."
 [[sensitivity.runs]]
 name = "conflation_buffer_8m"
 set = { "conflation.buffer_m" = 8.0 }
-why = "Lower bound on the buffer. Measured: fails the 90% recall gate at 78.9%."
+why = "Lower bound on the buffer. Measured: fails the 90% recall gate at 79.0%."
 
 [[sensitivity.runs]]
 name = "conflation_buffer_20m"
@@ -423,7 +423,7 @@ why = "Upper bound on conflation aggressiveness."
 [[sensitivity.runs]]
 name = "connector_15m"
 set = { "conflation.connector_max_m" = 15.0 }
-why = "Off-road trail attachment. Measured: barely matters, 12.0% either way."
+why = "Off-road trail attachment. Measured: barely matters, 18.3% either way."
 
 [[sensitivity.runs]]
 name = "connector_40m"

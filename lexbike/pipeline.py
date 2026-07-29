@@ -538,7 +538,7 @@ def run_sensitivity(params: Params, out_dir: Path, doc_path: Path) -> None:
 
     This is the answer to "why should I believe this map". Several thresholds
     are judgement calls rather than measurements — the 35 mph rating alone moves
-    the largest island from 12% to 42% — and publishing the sweep is more
+    the largest island from 18% to 59% — and publishing the sweep is more
     honest than publishing one number and hoping nobody asks.
 
     Also feeds the confidence field: a segment whose LTS flips under any variant

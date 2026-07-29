@@ -10,7 +10,7 @@ import {
 import {
   addConnectorLayer, addLayers, addRouteLayers, addSources, hitLayers, setLtsVisible,
   setRoute, setRouteAccess, setRouteEndpoints, setSourceVisible,
-} from './layers.js';
+} from './layers.js?v=20260729-route-colors';
 import { clipToEnd } from './lib/graph.js';
 import { announce, easeTo, isCoarsePointer } from './lib/a11y.js';
 import { debounce, onPopState, read, write } from './lib/urlstate.js';

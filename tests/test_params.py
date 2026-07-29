@@ -30,7 +30,9 @@ def test_facility_mapping_covers_every_source_value():
         "Sharrow",
         "Preferred Route",
     }
-    assert expected <= set(mapping), "every Type_Facility value in lexbike.geojson"
+    assert expected <= set(mapping), (
+        "every Type_Facility value in Bicycle_Network_Master.geojson"
+    )
 
     ranks = p["facility.rank"]
     for category in mapping.values():

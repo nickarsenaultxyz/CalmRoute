@@ -13,9 +13,9 @@ Live map: <https://nickarsenaultxyz.github.io/Lex-Bike-Data/>
 
 ## The finding
 
-> **About 1,220 miles are ridable for a confident rider, in one nearly-whole
-> network. But the 922 miles that are comfortable for an ordinary adult are
-> shattered into 986 disconnected islands, and the largest holds only 12% of
+> **About 1,227 miles are ridable for a confident rider, in one nearly-whole
+> network. But the 926 miles that are comfortable for an ordinary adult are
+> shattered into 929 disconnected islands, and the largest holds only 18% of
 > them.**
 
 Lexington's problem is not a shortage of quiet streets. It is that the quiet
@@ -128,8 +128,16 @@ centrelines canonical removes that entire class of problem.
 | File | Source | Contents |
 |---|---|---|
 | `lex_street_data.geojson` | LFUCG | 13,775 street centrelines |
-| `lexbike.geojson` | LFUCG | 528 bike facility segments |
+| `Bicycle_Network_Master.geojson` | LFUCG | 542 bike facility segments |
 | `StaList_Fayette (1).csv` | KYTC | 546 traffic count stations |
+
+A scheduled GitHub Actions build downloads the current
+[LFUCG Bicycle Network Public View](https://www.arcgis.com/home/item.html?id=90961d8f5c854453abf4123d4a99e139)
+each day before running the pipeline. The download count is checked against the
+FeatureServer count, and the normal schema, classification, regression and size
+checks must all pass before the map is deployed. If LFUCG is unavailable or
+publishes a breaking schema change, the build fails and the last good map stays
+online.
 
 A note on the bike layer, because it is easy to misread: `Type_Facility` is the
 facility that physically exists. `AltType_Facility` is a *recommended upgrade*,
@@ -138,10 +146,10 @@ not infrastructure — 37 segments on Redding Rd are `Type = Preferred Route` wi
 `EXISTING PREFERRED ROUTE`. Only `Type_Facility` feeds a rating; `AltType` feeds
 the "what if we built it" scenario.
 
-Lexington has **90.3 miles of on-road bike treatment** (53.4 bike lane, 19.1
-shoulder, 12.1 buffered lane, 5.7 sharrow). The bike layer spans 219.7 on-road
-miles, but the other 129.4 are `Preferred Route` — signed wayfinding with no
-physical treatment, which earns no rating credit.
+Lexington has **91.1 miles of on-road bike treatment** (53.0 bike lane, 19.1
+shoulder, 13.3 buffered lane, 5.7 sharrow). The existing bike layer spans 221.7
+on-road miles, but the other 130.6 are `Preferred Route` — signed wayfinding
+with no physical treatment, which earns no rating credit.
 
 ### Outputs
 
@@ -186,9 +194,9 @@ that does everything the map does.
 A bare link is not much use for advocacy, so every share composes the
 **statistic alongside the URL** — a pasted link carries its own argument:
 
-> Lexington has 922.1 miles of streets comfortable for an ordinary adult to bike
-> on — but they are split into 986 disconnected islands, and the largest holds
-> only 12% of them.
+> Lexington has 925.8 miles of streets comfortable for an ordinary adult to bike
+> on — but they are split into 929 disconnected islands, and the largest holds
+> only 18.3% of them.
 
 The link restores exactly what you were looking at: location, zoom, which
 ratings are shown, and any selected street. The text is generated from the live
