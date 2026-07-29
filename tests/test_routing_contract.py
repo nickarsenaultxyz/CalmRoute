@@ -103,6 +103,33 @@ def test_trails_can_be_joined_partway_along(graph):
     )
 
 
+def test_no_connector_is_longer_than_its_search_radius(graph):
+    """A connector is a short link across a verge, not a shortcut.
+
+    `project` is ambiguous where a path doubles back on itself, so deriving the
+    attachment point by round-tripping through an along-distance once produced a
+    1,476 m "connector" -- a phantom LTS 1 teleport across the city, free to
+    ride and invisible in every aggregate.
+    """
+    import tomllib
+
+    with open("params.toml", "rb") as fh:
+        max_m = float(tomllib.load(fh)["conflation"]["connector_max_m"])
+
+    fac = {}
+    for name in ("network.geojson", "context.geojson", "residential.geojson"):
+        for f in json.loads((DATA / name).read_text())["features"]:
+            fac[f["id"]] = f["properties"].get("fac", 0)
+
+    connectors = [e for e in graph["edges"] if fac.get(e[2]) == 7]
+    assert connectors, "no connectors in the graph"
+
+    longest_m = max(e[3] for e in connectors) * 1609.344
+    assert longest_m <= max_m * 1.1, (
+        f"longest connector is {longest_m:.0f} m against a {max_m:.0f} m radius"
+    )
+
+
 def test_the_low_stress_network_is_actually_routable(graph):
     """Guards the premise of the whole feature: if LTS 1-2 edges did not form
     substantial connected components, "plan a comfortable route" could never

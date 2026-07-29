@@ -72,7 +72,10 @@ def split_for_connectors(
 
     wanted: dict[int, list[tuple[float, float]]] = defaultdict(list)
     for _, row in connectors.iterrows():
-        wanted[int(row["split_street_id"])].append((row["split_x"], row["split_y"]))
+        street_id = int(row["split_street_id"])
+        if street_id < 0:
+            continue      # path-to-path connector; no centreline to split
+        wanted[street_id].append((row["split_x"], row["split_y"]))
 
     st_m = io.to_working_crs(streets, params)
     by_id = {int(v): i for i, v in enumerate(streets["id"].values)}

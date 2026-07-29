@@ -330,32 +330,90 @@ def _check_mileage(
 # ---------------------------------------------------------------------------
 
 def _find_attachments(part, candidates, tree, max_m, spacing_m):
-    """Points along a path where it can reasonably join the street network.
+    """Points along a path where it can join another line.
 
-    Returns ``[(distance_along_path, snapped_point_on_street, street_index)]``.
+    Returns ``[(distance_along_path, snapped_point_on_target, target_index)]``.
 
-    Every vertex is a candidate, because a trail meets streets wherever it
-    happens to. Thinning to one attachment per ``spacing_m`` keeps a trail that
-    runs parallel to a road from sprouting a connector at every vertex, which
-    would bloat the graph without adding a single useful junction.
+    Three properties this needs, each learned by getting it wrong:
+
+    *Every* nearby target, not just the closest. A trail running between two
+    streets must join both; querying only the nearest silently picks one and
+    leaves the other unreachable.
+
+    Thinning per target, not by distance along the path. Blind thinning to one
+    attachment per ``spacing_m`` drops whichever junction happens to fall inside
+    the window -- including the one a route needed. Instead each target gets its
+    single closest attachment, so a path beside a long road connects once, while
+    a path crossing five roads in 100 m connects five times.
+
+    Endpoints always attach if anything is in range. A trail's ends are where it
+    most obviously meets the network, and they must never be thinned away.
     """
-    found = []
-    last_at = None
-    for x, y in part.coords:
+    coords = list(part.coords)
+    if len(coords) < 2:
+        return []
+
+    # target index -> (gap, distance_along, snapped point)
+    best: dict[int, tuple[float, float, Point]] = {}
+
+    for idx, (x, y) in enumerate(coords):
         pt = Point(x, y)
-        nearest = np.atleast_1d(tree.query_nearest(pt))
-        if nearest.size == 0:
+        # Every candidate within reach, not merely the nearest one.
+        for k in tree.query(pt.buffer(max_m)):
+            k = int(k)
+            line = candidates.geometry.values[k]
+            gap = line.distance(pt)
+            if gap > max_m:
+                continue
+            is_end = idx == 0 or idx == len(coords) - 1
+            # An endpoint outranks a mid-path vertex for the same target.
+            score = gap - (max_m if is_end else 0.0)
+            prior = best.get(k)
+            if prior is None or score < prior[0]:
+                best[k] = (score, part.project(pt),
+                           line.interpolate(line.project(pt)), pt)
+
+    found = [(along, snapped, k, src) for k, (_, along, snapped, src) in best.items()]
+    found.sort(key=lambda t: t[0])
+
+    # A final light thin, only between attachments to *different* targets that
+    # land in essentially the same place, which would add a node and no reach.
+    out = []
+    for item in found:
+        if out and item[0] - out[-1][0] < spacing_m:
             continue
-        k = int(nearest[0])
-        line = candidates.geometry.values[k]
-        if line.distance(pt) > max_m:
-            continue
-        along = part.project(pt)
-        if last_at is not None and along - last_at < spacing_m:
-            continue
-        last_at = along
-        found.append((along, line.interpolate(line.project(pt)), k))
-    return found
+        out.append(item)
+    return out
+
+
+def _find_path_junctions(part, self_index, off, path_tree, max_m):
+    """Points where this path comes close to a *different* path.
+
+    Returns the same shape as :func:`_find_attachments`, with the target index
+    negated so the caller can tell a path target from a street target. Cutting
+    both paths at the meeting point is what lets a route turn from one trail
+    onto another.
+    """
+    if path_tree is None:
+        return []
+    out = []
+    seen: set[int] = set()
+    coords = list(part.coords)
+    for x, y in coords:
+        pt = Point(x, y)
+        for k in path_tree.query(pt.buffer(max_m)):
+            k = int(k)
+            if k == self_index or k in seen:
+                continue
+            other = off.geometry.values[k]
+            if other.distance(pt) > max_m:
+                continue
+            seen.add(k)
+            out.append((part.project(pt),
+                        other.interpolate(other.project(pt)),
+                        -(k + 1),
+                        pt))
+    return out
 
 
 def build_off_road(
@@ -403,6 +461,12 @@ def build_off_road(
     # be joined to it.
     candidates = st[~st["rdclass"].isin(excluded)].reset_index(drop=True)
     tree = STRtree(candidates.geometry.values)
+
+    # Paths are targets too. Two trails meeting is a junction a rider uses, and
+    # attaching only to streets left 33 pairs of trails touching within 8 m
+    # while sharing no node -- so a route could not turn from one onto the other.
+    path_geoms = list(off.geometry.values)
+    path_tree = STRtree(path_geoms) if path_geoms else None
     log.info(
         "off-road: %d paths, snapping to %d eligible centrelines (max %.0f m)",
         len(off), len(candidates), max_m,
@@ -419,30 +483,48 @@ def build_off_road(
                 continue
             attachments = _find_attachments(
                 part, candidates, tree, max_m, spacing_m)
+            attachments += _find_path_junctions(
+                part, i, off, path_tree, max_m)
+            # One list, sorted, so the cut points below stay in order.
+            attachments.sort(key=lambda t: t[0])
             attach_count += len(attachments)
 
             # Cut the path at every interior attachment so those points become
             # real nodes. Endpoints need no cut; they already are nodes.
             interior = sorted(
-                d for d, _, _ in attachments if 1e-6 < d < part.length - 1e-6)
+                d for d, _, _, _ in attachments if 1e-6 < d < part.length - 1e-6)
             pieces = cut_line(part, interior) if interior else [part]
             for piece in pieces:
                 row = dict(template)
                 row["geometry"] = piece
                 path_rows.append(row)
 
-            for dist_along, snapped, street_idx in attachments:
-                on_path = part.interpolate(dist_along)
+            for dist_along, snapped, street_idx, source_pt in attachments:
+                # Use the vertex the match was found at, NOT
+                # part.interpolate(dist_along). `project` is ambiguous where a
+                # path doubles back on itself, so round-tripping through the
+                # along-distance can land on a completely different part of the
+                # trail -- which produced a 1,476 m "connector", a phantom
+                # low-stress shortcut across the city.
+                on_path = source_pt
                 gap = on_path.distance(snapped)
                 if gap < 1e-9:
                     continue     # already coincident; no connector geometry needed
+                if gap > max_m:
+                    # Belt and braces: nothing beyond the search radius can be a
+                    # short link, whatever the geometry did.
+                    continue
+                to_path = street_idx < 0
                 connectors.append({
                     "geometry": LineString(
                         [(on_path.x, on_path.y), (snapped.x, snapped.y)]),
                     "fac": "connector",
                     "length_m": float(gap),
                     "path_row": i,
-                    "split_street_id": int(candidates.at[street_idx, "id"]),
+                    # A path-to-path connector has no centreline to split; the
+                    # -1 sentinel tells network.split_for_connectors to skip it.
+                    "split_street_id": -1 if to_path
+                                       else int(candidates.at[street_idx, "id"]),
                     "split_x": float(snapped.x),
                     "split_y": float(snapped.y),
                 })
