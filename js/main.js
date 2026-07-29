@@ -575,6 +575,8 @@ const syncUrl = debounce(() => {
 /* ------------------------------------------------------------------- boot */
 
 async function boot() {
+  // Tells the watchdog in index.html that the module graph linked and ran.
+  window.__lexbikeBooted = true;
   if (!checkSupport()) return;
 
   app.panel = new Panel({ onBack: () => history.back() });
@@ -737,4 +739,37 @@ function restoreSelection(push = false) {
   }
 }
 
-boot();
+/**
+ * Never leave the spinner running.
+ *
+ * A throw anywhere in boot() used to leave the loading chip spinning forever
+ * with nothing in the console the reader can see. The commonest cause is a
+ * stale module: browsers cache ES modules hard, so after a deploy a reader can
+ * hold an old layers.js against a new main.js and the missing export takes the
+ * whole boot down.
+ */
+boot().catch((err) => {
+  console.error('boot failed', err);
+  setLoading(null);
+  const stale = /is not a function|has already been declared|Failed to fetch/i
+    .test(String(err && err.message));
+  app.panel?.show({
+    title: 'The map failed to start',
+    root: true,
+    html: `<p class="note">${stale
+      ? 'This usually means your browser is holding an old copy of the page. '
+        + 'A hard refresh should fix it.'
+      : 'Something went wrong while setting up the map.'}</p>
+      <div class="share-actions">
+        <button class="btn primary" onclick="location.reload(true)">Reload</button>
+      </div>
+      <p class="tech">${escapeHtmlLite(String(err && err.message || err))}</p>
+      <p class="tech">The data is open either way:
+        <a href="./data/network.geojson">network.geojson</a>.</p>`,
+  });
+});
+
+function escapeHtmlLite(s) {
+  return s.replace(/[&<>"]/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
