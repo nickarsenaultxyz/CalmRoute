@@ -55,6 +55,10 @@ def test_manifest_has_an_initial_view(manifest):
     assert len(manifest["center"]) == 2
     assert isinstance(manifest["zoom"], (int, float))
     assert manifest["version"], "js/data.js appends ?v=<version> for cache busting"
+    assert manifest["version"] == manifest["generated"], (
+        "the full build timestamp must be the cache key; a date alone collides "
+        "when two source refreshes deploy on the same day"
+    )
 
 
 # --------------------------------------------------------------------------
