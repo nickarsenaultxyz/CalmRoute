@@ -4,6 +4,22 @@ import { FAC_CONNECTOR, LAYERS, LTS, SOURCES } from './config.js';
 
 export const layerId = (e) => `${e.src}-lts${e.lts}`;
 
+// Keep the rest of the network as geographic context while a route is shown,
+// without letting it compete with the route itself.
+const ROUTE_CONTEXT_OPACITY = 0.18;
+
+const casingOpacity = (focused = false) => [
+  'interpolate', ['linear'], ['zoom'],
+  11, 0,
+  13, focused ? ROUTE_CONTEXT_OPACITY : 1,
+];
+
+const connectorOpacity = (focused = false) => [
+  'interpolate', ['linear'], ['zoom'],
+  13, 0,
+  15, focused ? 0.5 * ROUTE_CONTEXT_OPACITY : 0.5,
+];
+
 /**
  * Width expression.
  *
@@ -68,7 +84,7 @@ export function addLayers(map) {
           'line-color': 'rgba(255,255,255,0.85)',
           'line-width': widthExpr(base + 2.4),
           // A halo is noise when the city fits on screen.
-          'line-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 13, 1],
+          'line-opacity': casingOpacity(),
         },
       });
     }
@@ -116,7 +132,7 @@ export function addConnectorLayer(map) {
       paint: {
         'line-color': LTS[1].color,
         'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.8, 17, 2],
-        'line-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0, 15, 0.5],
+        'line-opacity': connectorOpacity(),
         'line-dasharray': [1, 1.5],
       },
     });
@@ -168,12 +184,11 @@ export function swatchSvg(lts) {
 /* ------------------------------------------------------------------- route */
 
 /**
- * Route rendering: a bright casing, the line, and the stressful portion
- * overpainted in red on top.
+ * Route rendering: a bright casing with each segment painted in its LTS color.
  *
- * The overpaint is the point. A router that quietly routes someone down an
- * arterial and shows one uniform line has hidden the compromise it made; this
- * makes the trade visible before they set off.
+ * Keeping the same palette as the network makes every comfort change along the
+ * trip visible. The white casing and faded network context distinguish route
+ * segments from nearby streets even when they share a color.
  */
 export function addRouteLayers(map) {
   if (map.getSource('route')) return;
@@ -189,18 +204,16 @@ export function addRouteLayers(map) {
   map.addLayer({
     id: 'route-line', type: 'line', source: 'route',
     layout: { 'line-cap': 'round', 'line-join': 'round' },
-    // Near-black, NOT blue. The first attempt used #1d4ed8, which is a shade
-    // away from the LTS 2 blue it is drawn on top of -- the route was rendering
-    // correctly and was simply invisible against the network. Every hue in the
-    // LTS ramp is spoken for (green, blue, orange, red, grey) and violet is the
-    // planned-projects layer, so the route takes the one slot left.
-    paint: { 'line-color': '#111827', 'line-width': 6 },
-  });
-  map.addLayer({
-    id: 'route-stress', type: 'line', source: 'route',
-    filter: ['>', ['get', 'lts'], 2],
-    layout: { 'line-cap': 'round', 'line-join': 'round' },
-    paint: { 'line-color': '#dc2626', 'line-width': 6 },
+    paint: {
+      'line-color': ['match', ['get', 'lts'],
+        0, LTS[0].color,
+        1, LTS[1].color,
+        2, LTS[2].color,
+        3, LTS[3].color,
+        4, LTS[4].color,
+        LTS[0].color],
+      'line-width': 6,
+    },
   });
   map.addSource('route-access', { type: 'geojson', data: empty });
   map.addLayer({
@@ -209,7 +222,7 @@ export function addRouteLayers(map) {
     paint: {
       // Visible enough to read as "you have to get here yourself", distinct
       // enough from the solid route not to be mistaken for part of the ride.
-      'line-color': '#111827', 'line-width': 3.5, 'line-opacity': 0.9,
+      'line-color': '#6b7280', 'line-width': 3.5, 'line-opacity': 0.9,
       'line-dasharray': [1.5, 1.5],
     },
   });
@@ -227,6 +240,34 @@ export function addRouteLayers(map) {
 export function setRoute(map, featureCollection) {
   map.getSource('route')?.setData(
     featureCollection || { type: 'FeatureCollection', features: [] });
+  setRouteFocus(map, Boolean(featureCollection?.features?.length));
+}
+
+/**
+ * Fade the network beneath a route, then restore its configured opacities when
+ * the route is cleared. Visibility remains untouched, so legend choices still
+ * apply and every non-route segment stays present as quiet map context.
+ */
+function setRouteFocus(map, focused) {
+  for (const entry of LAYERS) {
+    const id = layerId(entry);
+    if (map.getLayer(id)) {
+      map.setPaintProperty(
+        id, 'line-opacity',
+        LTS[entry.lts].opacity * (focused ? ROUTE_CONTEXT_OPACITY : 1),
+      );
+    }
+    if (map.getLayer(`${id}-casing`)) {
+      map.setPaintProperty(
+        `${id}-casing`, 'line-opacity', casingOpacity(focused));
+    }
+  }
+  for (const src of SOURCES) {
+    const id = `${src}-connectors`;
+    if (map.getLayer(id)) {
+      map.setPaintProperty(id, 'line-opacity', connectorOpacity(focused));
+    }
+  }
 }
 
 export function setRouteAccess(map, featureCollection) {
