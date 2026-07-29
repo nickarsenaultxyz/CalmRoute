@@ -334,7 +334,17 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
             "aadt_measured_segments": extra.get("aadt_measured", 0),
             "aadt_measured_pct": extra.get("aadt_measured_pct", 0.0),
         },
+        "coverage": {
+            "sampled_areas": params.get("coverage.sampled_areas"),
+            "osm_named_streets": params.get("coverage.osm_named_streets"),
+            "missing_from_lfucg": params.get("coverage.missing_from_lfucg"),
+            "missing_pct": round(
+                100 * params["coverage.missing_from_lfucg"]
+                / params["coverage.osm_named_streets"], 1)
+            if params.get("coverage.osm_named_streets") else None,
+        },
         "limitations": [
+            params["coverage.note"],
             "Traffic counts exist only on state-maintained routes, so volumes for "
             "most local streets are imputed from class medians and are estimates.",
             "Lane counts are not in any source; they are inferred from road class, "

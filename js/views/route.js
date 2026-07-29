@@ -18,7 +18,7 @@ import { escapeHtml, miles as fmtMiles, minutes } from '../lib/format.js';
 
 const POINT_LABEL = { from: 'Start', to: 'Destination' };
 
-export function render(state) {
+export function render(state, stats) {
   const row = (which) => {
     const p = state[which];
     const set = !!p;
@@ -54,7 +54,17 @@ export function render(state) {
       <span>Only quiet streets — no route rather than a stressful one</span>
     </label>
 
-    <div id="route-result">${state.result ? result(state) : ''}</div>`;
+    <div id="route-result">${state.result ? result(state) : ''}</div>
+    ${state.result && state.result.kind === 'ok' ? coverageNote(stats) : ''}`;
+}
+
+/** The one caveat a rider needs when a route looks like a detour. */
+function coverageNote(stats) {
+  const pct = stats?.coverage?.missing_pct;
+  if (!pct) return '';
+  return `<p class="tech">If this looks like a detour: the city's street file is
+    missing about ${pct}% of named streets, and a street that is not in the data
+    cannot be routed over.</p>`;
 }
 
 /** Verdict for a completed search. */

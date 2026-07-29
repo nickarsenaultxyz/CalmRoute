@@ -65,6 +65,12 @@ Known limitations, also published in `data/methodology.json`:
   status and cartographic class, and shipped as a property so you can audit it.
 - On-street parking and bike lane width are not modelled — neither is recorded.
 - Ratings describe **built** infrastructure only. Funded projects are separate.
+- **LFUCG's street file is missing about 6% of named streets** — 22 of 375
+  across three sampled areas, measured against OpenStreetMap. A street that is
+  not in the data cannot be rated or routed over, so a route may detour around
+  one that exists. Not filled from OSM: imported geometry would carry no posted
+  speed or road class, so assuming a comfortable rating invents one and assuming
+  a stressful one leaves the router avoiding it anyway.
 
 ## Usage
 

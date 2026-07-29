@@ -179,7 +179,7 @@ function showRoute({ push = true } = {}) {
   app.state.view = 'route';
   const body = app.panel.show({
     title: 'Plan a route',
-    html: routeView.render(app.route),
+    html: routeView.render(app.route, app.stats),
   });
   routeView.mount(body, {
     onPick: (which) => {
