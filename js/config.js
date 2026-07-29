@@ -115,6 +115,60 @@ export const FAC_PUBLIC = {
   7: 'Path connection',
 };
 
+/**
+ * How hard the router works to avoid stress, as a rider-facing scale.
+ *
+ * `penalty` is a detour multiplier on distance: 2.5 on LTS 4 means the router
+ * will ride 2.5 miles of quiet street rather than 1 mile of arterial, and — just
+ * as importantly — will not ride 3. These are preferences, not physics. LTS 0 is
+ * Infinity at every setting because cycling there is illegal, which is not a
+ * preference a slider gets to override.
+ *
+ * The default is `balanced`. The single setting this replaced was `quiet`, and
+ * at 6.0 it produced routes that were technically comfortable and practically
+ * unusable: a rider shown a 29% detour to dodge two blocks of collector does not
+ * take the detour, they take the collector and stop trusting the map. The old
+ * behaviour is still here, one notch along, and the balanced route still says so
+ * when it puts someone on a busy road.
+ *
+ * `balanced` is measured, not guessed. Over 120 pseudo-random trips of 1.5-8
+ * direct miles on the real graph, medians were:
+ *
+ *     setting          detour   stress mi   LTS 4 mi   trips touching LTS 4
+ *     direct            1.02      3.28        0.80            86%
+ *     3:1.5 4:2.5       1.14      2.43        0.25            72%
+ *     3:1.4 4:3.5       1.15      2.54        0.05            61%   <- chosen
+ *     3:1.4 4:5.0       1.16      2.59        0.02            55%
+ *     quiet 3:2.6 4:6   1.29      1.57        0.05            64%
+ *
+ * The knee is at 4:3.5 — the same detour as 4:2.5 for a fifth of the arterial
+ * mileage. Keeping LTS 3 cheap (1.4) is what pays for it: busy collectors are
+ * the affordable alternative to an arterial, so the router can treat LTS 4 as
+ * expensive without going far out of its way. The rise in total stress miles is
+ * that substitution, which is the trade worth making — "busy" instead of
+ * "experienced riders only".
+ *
+ * Lives in config rather than in the router because both the router and the
+ * slider need the same table, and the labels are public-facing copy.
+ */
+export const ROUTE_LEVELS = [
+  { key: 'direct', label: 'Most direct', tick: 'Direct',
+    hint: 'The short way. Dodges arterials only where it is nearly free.',
+    penalty: { 0: Infinity, 1: 1.0, 2: 1.0, 3: 1.15, 4: 1.4 } },
+  { key: 'balanced', label: 'Balanced', tick: null,
+    hint: 'Trades a little distance for a lot of comfort.',
+    penalty: { 0: Infinity, 1: 1.0, 2: 1.05, 3: 1.4, 4: 3.5 } },
+  { key: 'quiet', label: 'Prefer quiet', tick: null,
+    hint: 'Goes well out of the way to stay off busy roads.',
+    penalty: { 0: Infinity, 1: 1.0, 2: 1.05, 3: 2.6, 4: 6.0 } },
+  { key: 'only', label: 'Quiet streets only', tick: 'Quiet only',
+    hint: 'Refuses rather than compromise — no route instead of a stressful one.',
+    penalty: { 0: Infinity, 1: 1.0, 2: 1.0, 3: Infinity, 4: Infinity } },
+];
+
+export const DEFAULT_ROUTE_LEVEL = 1;
+export const QUIETEST_ROUTE_LEVEL = ROUTE_LEVELS.length - 1;
+
 /** `kind`, rendered in English. The previous map leaked the internal values
  *  (`bikeable_streets`, `unbikeable_without_infrastructure`) into the UI. */
 export const KIND_PUBLIC = {

@@ -47,8 +47,9 @@ def test_edge_lengths_are_positive(graph):
 
 
 def test_lts_values_have_a_routing_penalty(graph):
-    """js/lib/dijkstra.js PENALTY covers 0-4. An unmapped value yields an
-    undefined cost, which silently poisons every path through that edge."""
+    """Every ROUTE_LEVELS penalty table in js/config.js covers 0-4. An unmapped
+    value is treated as impassable, so the edge would silently vanish from the
+    network at every comfort setting rather than being routed over."""
     assert {e[4] for e in graph["edges"]} <= {0, 1, 2, 3, 4}
 
 

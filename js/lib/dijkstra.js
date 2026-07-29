@@ -8,27 +8,36 @@
  * message-passing would cost more than the search.
  */
 
+import { ROUTE_LEVELS, DEFAULT_ROUTE_LEVEL } from '../config.js';
+
 /**
- * Detour multipliers applied to distance.
+ * One weight function per comfort setting, keyed by `ROUTE_LEVELS[i].key`, plus
+ * `shortest`. The multipliers and the reasoning behind them live in config.js
+ * beside the labels the slider shows, so the number a rider is choosing and the
+ * words describing it cannot drift apart.
  *
- * These are preferences, not physics: 1 mile of LTS 4 arterial is treated as
- * costing what 6 miles of quiet street costs, so the router will take a long
- * way round rather than put someone on it. LTS 0 is prohibited outright.
+ * An LTS the table does not cover is treated as impassable rather than as
+ * `undefined * miles`, which would be NaN and would silently poison every path
+ * through that edge instead of just excluding it.
  */
-export const PENALTY = { 0: Infinity, 1: 1.0, 2: 1.05, 3: 2.6, 4: 6.0 };
+const byPenalty = (penalty) => (g, e) => {
+  const p = penalty[g.eLts[e]];
+  return p === undefined || p === Infinity ? Infinity : g.eMi[e] * p;
+};
 
 export const MODES = {
-  // Default: strongly prefers comfort but will use a busy road if that is the
-  // only way through, and shows the rider where it did.
-  comfort: (g, e) => {
-    const p = PENALTY[g.eLts[e]];
-    return p === Infinity ? Infinity : g.eMi[e] * p;
-  },
-  // Hard filter. Returns no route at all rather than a compromised one.
-  avoid: (g, e) => (g.eLts[e] >= 1 && g.eLts[e] <= 2 ? g.eMi[e] : Infinity),
   // Ignores stress entirely; the denominator for the detour factor.
   shortest: (g, e) => (g.eLts[e] === 0 ? Infinity : g.eMi[e]),
 };
+for (const level of ROUTE_LEVELS) MODES[level.key] = byPenalty(level.penalty);
+
+export const DEFAULT_MODE = ROUTE_LEVELS[DEFAULT_ROUTE_LEVEL].key;
+
+/** Whether a mode can traverse an edge at all — the same question the search
+ *  asks, without running one, for callers handling a single-edge trip. */
+export function passable(g, e, mode) {
+  return isFinite((MODES[mode] || MODES[DEFAULT_MODE])(g, e));
+}
 
 class Heap {
   constructor(capacity) {
@@ -79,12 +88,12 @@ class Heap {
  * One-to-one search.
  *
  * Returns `null` when the target is unreachable under this mode, which is a
- * real answer rather than an error: for `avoid` it means the two points are on
+ * real answer rather than an error: for `only` it means the two points are on
  * different low-stress islands.
  */
-export function route(g, source, target, mode = 'comfort') {
+export function route(g, source, target, mode = DEFAULT_MODE) {
   if (source < 0 || target < 0) return null;
-  const weight = MODES[mode] || MODES.comfort;
+  const weight = MODES[mode] || MODES[DEFAULT_MODE];
 
   const dist = new Float64Array(g.n).fill(Infinity);
   const prevEdge = new Int32Array(g.n).fill(-1);
@@ -120,12 +129,21 @@ export function route(g, source, target, mode = 'comfort') {
   return { ...trace(g, source, target, prevEdge), cost: dist[target], settled };
 }
 
-/** Walk the predecessor edges back from the target. */
+/**
+ * Walk the predecessor edges back from the target.
+ *
+ * `severeMiles` counts LTS 4 alone, separately from `stressMiles`, which counts
+ * LTS 3 and 4 together. Both are needed: a quieter setting often trades an
+ * arterial for a longer stretch of busy collector, which *raises* stressMiles
+ * while genuinely improving the ride. Ranking two routes on the combined figure
+ * alone calls that trade a regression and hides the better route.
+ */
 function trace(g, source, target, prevEdge) {
   const edges = [];
   const featureIds = [];
   let miles = 0;
   let stressMiles = 0;
+  let severeMiles = 0;
   let worstLts = 0;
   let node = target;
 
@@ -137,12 +155,13 @@ function trace(g, source, target, prevEdge) {
     miles += g.eMi[e];
     const l = g.eLts[e];
     if (l > 2) stressMiles += g.eMi[e];
+    if (l === 4) severeMiles += g.eMi[e];
     if (l > worstLts) worstLts = l;
     node = g.eu[e] === node ? g.ev[e] : g.eu[e];
   }
   edges.reverse();
   featureIds.reverse();
-  return { edges, featureIds, miles, stressMiles, worstLts };
+  return { edges, featureIds, miles, stressMiles, severeMiles, worstLts };
 }
 
 /**
@@ -152,8 +171,8 @@ function trace(g, source, target, prevEdge) {
  * isochrone costs no more than a route. Unused by the routing UI; here because
  * it is three lines and Phase 7 would otherwise duplicate the whole function.
  */
-export function reachable(g, source, mode = 'comfort', maxCost = Infinity) {
-  const weight = MODES[mode] || MODES.comfort;
+export function reachable(g, source, mode = DEFAULT_MODE, maxCost = Infinity) {
+  const weight = MODES[mode] || MODES[DEFAULT_MODE];
   const dist = new Float64Array(g.n).fill(Infinity);
   const done = new Uint8Array(g.n);
   const heap = new Heap(g.m * 2 + 16);
