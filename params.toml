@@ -299,6 +299,12 @@ connector_max_m = 25.0         # 162 of 254 off-road endpoints connect at 25 m
 # graph without adding a useful junction.
 attach_spacing_m = 120.0
 
+# No path edge may exceed this. Attachment points only appear where a path meets
+# something else, so a rural trail can still run for miles as one edge -- and a
+# route travelling along it could only leave at its ends. Subdividing gives the
+# router somewhere to turn off. OSM's longest imported way was 7.5 mi.
+max_path_edge_m = 800.0
+
 
 # ---------------------------------------------------------------------------
 #  Connectivity
@@ -315,6 +321,46 @@ attach_spacing_m = 120.0
 # browser would render two lines visibly touching that the graph calls separate.
 min_cluster_segments = 3
 barrier_min_island_segments = 3
+
+
+# ---------------------------------------------------------------------------
+#  Supplementary paths from OpenStreetMap
+# ---------------------------------------------------------------------------
+#
+#  OFF BY DEFAULT. Turn on with `--set osm.enabled=true`.
+#
+#  LFUCG has 62.6 mi of off-road facility; OSM has 200.7 mi of cycleway and
+#  bicycle=designated path in Fayette County, 153.5 mi of it more than 15 m from
+#  anything the city file contains -- campus paths, apartment connectors, park
+#  links.
+#
+#  This is importable where OSM *streets* are not. A path separated from traffic
+#  is LTS 1 by definition, which is already how LFUCG paths are rated, so
+#  nothing has to be inferred and nothing is conflated onto a centreline. OSM's
+#  261 mi of untagged paved footway is excluded: almost all of it is sidewalk.
+#
+#  LICENSING: OpenStreetMap is ODbL. Publishing this requires attribution, and a
+#  produced database mixing it in is likely subject to share-alike. That is the
+#  project owner's decision, which is why this defaults to off.
+
+[osm]
+enabled = false
+overpass_url = "https://overpass-api.de/api/interpreter"
+county_area = "Fayette County"
+fetch_timeout_s = 150
+
+# A way is a duplicate when most of its length runs inside a buffer around the
+# existing off-road network. Length-based, so a trail digitized with different
+# vertices still matches.
+dedupe_buffer_m = 15.0
+dedupe_max_overlap = 0.5
+
+# Refuse an import wildly outside what was measured, so a bad Overpass day or an
+# edit war cannot silently swing the "bike network" between builds.
+expect_min_miles = 100.0
+expect_max_miles = 220.0
+
+attribution = "Supplementary paths (c) OpenStreetMap contributors, ODbL"
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +413,13 @@ simplify_residential = 0.00003
 "stats.json" = 8
 "methodology.json" = 12
 "manifest.json" = 2
+
+# Budgets that apply when osm.enabled -- 154 extra path miles land in the
+# critical-path layer. Kept separate so the default build still fails if it
+# creeps past its own, much tighter, limit.
+[export.budget_kb_osm]
+"network.geojson" = 170
+"graph.json" = 260
 
 
 # ---------------------------------------------------------------------------

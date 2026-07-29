@@ -232,7 +232,11 @@ def check_sizes(out_dir: Path, params: Params, *, enforce: bool = True) -> dict:
     what the user actually downloads. Raw size would over-report by ~4x and lead
     to optimizing the wrong thing.
     """
-    budgets = params["export.budget_kb"]
+    budgets = dict(params["export.budget_kb"])
+    if params.get("osm.enabled", False):
+        # Supplementary paths legitimately enlarge two artifacts; the defaults
+        # stay tight so a regression in the normal build is still caught.
+        budgets.update(params.get("export.budget_kb_osm", {}))
     report = {}
     problems = []
 
@@ -346,6 +350,10 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
             "aadt_count_years": extra.get("aadt_years", {}),
             "aadt_measured_segments": extra.get("aadt_measured", 0),
             "aadt_measured_pct": extra.get("aadt_measured_pct", 0.0),
+        },
+        "osm_paths": {
+            "enabled": bool(params.get("osm.enabled", False)),
+            "attribution": params.get("osm.attribution", ""),
         },
         "coverage": {
             "sampled_areas": params.get("coverage.sampled_areas"),
