@@ -183,6 +183,18 @@ def test_critical_path_stays_within_budget(manifest):
     quietly reintroduce a multi-megabyte first paint."""
     import gzip
 
+    import tomllib
+
+    with open("params.toml", "rb") as fh:
+        params = tomllib.load(fh)
+    # Read what the build actually did, not what params.toml says: `--set
+    # osm.enabled=true` never touches the file, so trusting the file here made
+    # this test fail against a perfectly valid OSM build.
+    stats = load(manifest["files"]["stats"])
+    budget = params["export"]["budget_kb"]["network.geojson"]
+    if stats.get("osm_paths", {}).get("enabled"):
+        budget = params["export"]["budget_kb_osm"]["network.geojson"]
+
     raw = (DATA / manifest["files"]["network"]).read_bytes()
     kb = len(gzip.compress(raw, 6)) / 1024
-    assert kb < 90, f"critical path is {kb:.0f} KB gzipped"
+    assert kb < budget, f"critical path is {kb:.0f} KB gzipped against {budget}"
