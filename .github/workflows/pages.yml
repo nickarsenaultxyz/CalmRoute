@@ -14,6 +14,11 @@ on:
     paths-ignore:
       - '**.md'
       - 'docs/**'
+  # LFUCG updates the public FeatureServer independently of this repository.
+  # A daily rebuild keeps the public map current without relying on someone to
+  # notice and manually upload a new export.
+  schedule:
+    - cron: '23 10 * * *'
   workflow_dispatch:
 
 permissions:
@@ -41,6 +46,20 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Fetch latest LFUCG bicycle network
+        env:
+          BIKE_LAYER: https://services1.arcgis.com/Mg7DLdfYcSWIaDnu/arcgis/rest/services/Bicycle_Network_Public_View/FeatureServer/0
+        run: |
+          expected="$(curl --fail --silent --show-error --location --retry 3 \
+            "${BIKE_LAYER}/query?where=1%3D1&returnCountOnly=true&f=json" \
+            | python -c 'import json,sys; print(json.load(sys.stdin)["count"])')"
+          curl --fail --silent --show-error --location --retry 3 \
+            "${BIKE_LAYER}/query?where=1%3D1&outFields=%2A&returnGeometry=true&outSR=4326&f=geojson" \
+            --output Bicycle_Network_Master.geojson
+          actual="$(python -c 'import json; print(len(json.load(open("Bicycle_Network_Master.geojson"))["features"]))')"
+          test "${actual}" -eq "${expected}"
+          echo "Fetched ${actual} LFUCG bicycle-network features."
+
       - name: Run tests
         # A failing suite must not reach the public map. The frontend-contract
         # tests skip when data/ is absent, so they run again after the build.
@@ -62,6 +81,11 @@ jobs:
 
       - name: Build the data artifacts
         run: make build PY=python
+
+      - name: Validate headline figures
+        # A source refresh may legitimately improve connectivity, but a large
+        # unexplained jump should be reviewed before replacing the public map.
+        run: make validate PY=python
 
       - name: Verify the frontend contract against the built data
         run: python -m pytest tests/test_frontend_contract.py -q

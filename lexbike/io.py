@@ -18,7 +18,7 @@ gpd.options.io_engine = "pyogrio"
 
 log = logging.getLogger(__name__)
 
-BIKE_PATH = Path("lexbike.geojson")
+BIKE_PATH = Path("Bicycle_Network_Master.geojson")
 STREET_PATH = Path("lex_street_data.geojson")
 AADT_PATH = Path("StaList_Fayette (1).csv")
 
@@ -44,6 +44,27 @@ def _norm_text(s: pd.Series) -> pd.Series:
     """Collapse whitespace so ``'EXISTING BUFFERED BIKE LANE '`` and its
     un-padded twin do not read as two different values."""
     return s.astype("string").str.strip().str.replace(r"\s+", " ", regex=True)
+
+
+def _canonicalize_columns(gdf: gpd.GeoDataFrame, expected: tuple[str, ...]) -> gpd.GeoDataFrame:
+    """Accept ArcGIS field-name casing changes without weakening the schema.
+
+    LFUCG's former download used ``Type_Facility``/``OBJECTID`` while the
+    current public view emits ``type_facility``/``objectid``. Field names are
+    case-insensitive in ArcGIS, so treating those as different schemas would
+    make a harmless service republish break an otherwise valid refresh.
+    """
+    by_folded = {str(column).casefold(): column for column in gdf.columns}
+    missing = [name for name in expected if name.casefold() not in by_folded]
+    if missing:
+        raise SourceDataError(f"bike facility source is missing field(s): {missing}")
+
+    rename = {
+        by_folded[name.casefold()]: name
+        for name in expected
+        if by_folded[name.casefold()] != name
+    }
+    return gdf.rename(columns=rename)
 
 
 def load_streets(params: Params, path: Path = STREET_PATH) -> gpd.GeoDataFrame:
@@ -119,6 +140,18 @@ def load_bike_facilities(params: Params, path: Path = BIKE_PATH) -> gpd.GeoDataF
     """
     gdf = gpd.read_file(_require(path))
     gdf = _ensure_4326(gdf)
+    gdf = _canonicalize_columns(
+        gdf,
+        (
+            "OBJECTID",
+            "Type_Facility",
+            "Status",
+            "Type_Road",
+            "AltType_Facility",
+            "Name_Facility",
+            "Name_Network",
+        ),
+    )
     log.info("loaded %d bike facility segments from %s", len(gdf), path)
 
     mapping = params["facility.type_map"]
@@ -146,7 +179,6 @@ def load_bike_facilities(params: Params, path: Path = BIKE_PATH) -> gpd.GeoDataF
     else:
         gdf["id_src"] = pd.RangeIndex(len(gdf)).astype("int64")
 
-    gdf["status"] = _norm_text(gdf["Status"])
     gdf["on_road"] = _norm_text(gdf["Type_Road"]).eq("On Road")
     gdf["recommended"] = _norm_text(gdf.get("AltType_Facility"))
     gdf["facility_name"] = _norm_text(gdf.get("Name_Facility"))
@@ -154,6 +186,33 @@ def load_bike_facilities(params: Params, path: Path = BIKE_PATH) -> gpd.GeoDataF
 
     existing = params["scenario.existing_status"]
     funded = params["scenario.funded_status"]
+    status = _norm_text(gdf["Status"]).replace("", pd.NA)
+    # The current LFUCG view has a few blank Status cells whose facility names
+    # still carry an unambiguous EXISTING/FUNDED prefix. Recover only those
+    # explicit cases; an unlabeled blank remains excluded and logged below.
+    missing_status = status.isna()
+    inferred_existing = missing_status & gdf["facility_name"].str.startswith(
+        "EXISTING", na=False
+    )
+    inferred_funded = missing_status & gdf["facility_name"].str.startswith(
+        "FUNDED", na=False
+    )
+    status = status.mask(inferred_existing, existing).mask(inferred_funded, funded)
+    inferred = int(inferred_existing.sum() + inferred_funded.sum())
+    if inferred:
+        log.warning(
+            "%d facility segment(s) have blank Status; inferred it from the "
+            "Name_Facility prefix",
+            inferred,
+        )
+    unresolved = int(status.isna().sum())
+    if unresolved:
+        log.warning(
+            "%d facility segment(s) still have no Status and will not affect ratings",
+            unresolved,
+        )
+    gdf["status"] = status
+
     counts = gdf["status"].value_counts(dropna=False).to_dict()
     log.info("facility Status breakdown: %s", counts)
     if existing not in counts:
