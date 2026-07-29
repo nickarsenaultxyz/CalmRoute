@@ -177,6 +177,17 @@ export function addRouteLayers(map) {
     layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: { 'line-color': '#dc2626', 'line-width': 6 },
   });
+  map.addSource('route-access', { type: 'geojson', data: empty });
+  map.addLayer({
+    id: 'route-access', type: 'line', source: 'route-access',
+    layout: { 'line-cap': 'round' },
+    paint: {
+      // Visible enough to read as "you have to get here yourself", distinct
+      // enough from the solid route not to be mistaken for part of the ride.
+      'line-color': '#111827', 'line-width': 3.5, 'line-opacity': 0.9,
+      'line-dasharray': [1.5, 1.5],
+    },
+  });
   map.addLayer({
     id: 'route-endpoints', type: 'circle', source: 'route-endpoints',
     paint: {
@@ -190,6 +201,11 @@ export function addRouteLayers(map) {
 
 export function setRoute(map, featureCollection) {
   map.getSource('route')?.setData(
+    featureCollection || { type: 'FeatureCollection', features: [] });
+}
+
+export function setRouteAccess(map, featureCollection) {
+  map.getSource('route-access')?.setData(
     featureCollection || { type: 'FeatureCollection', features: [] });
 }
 
