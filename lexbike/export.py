@@ -270,8 +270,20 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
 
     Mileage everywhere, not segment counts: segment length spans two orders of
     magnitude, so counts would be a misleading public metric.
+
+    Connectors are excluded from every mileage figure. They are synthetic links
+    joining a trail to the street beside it -- 1,483 of them, median 49 ft --
+    and counting them as ridable network would have added 12.8 miles of
+    infrastructure nobody built to the "Relaxed" total.
     """
     rules = lts_mod.Ruleset.from_params(params)
+    real = edges[edges["fac"] != "connector"] if "fac" in edges.columns else edges
+    connector_mi = (
+        io.to_working_crs(edges[edges["fac"] == "connector"], params)
+        .geometry.length.sum() / METRES_PER_MILE
+        if "fac" in edges.columns else 0.0
+    )
+    edges = real
     miles = io.to_working_crs(edges, params).geometry.length / METRES_PER_MILE
     labels = params["lts.labels"]
 
@@ -304,6 +316,7 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
         "ruleset_version": params["meta.ruleset_version"],
         "params_digest": params.digest,
         "total_miles": round(float(miles.sum()), 1),
+        "connector_miles_excluded": round(float(connector_mi), 1),
         "by_lts": by_lts,
         "low_stress": {
             "max_lts": rules.low_stress_max,

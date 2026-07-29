@@ -51,6 +51,10 @@ export const SOURCES = ['network', 'context', 'residential'];
  * previous map's deliberate fix. Within one rating, a built facility paints
  * above a plain street, so a bike lane is never hidden by the road it is on.
  */
+/** Facility code for a synthetic path-to-street link. Excluded from the LTS
+ *  layers: it is a routing artefact, not infrastructure anyone built. */
+export const FAC_CONNECTOR = 7;
+
 export const LAYERS = [
   { src: 'context',     lts: 0, casing: false },
   { src: 'context',     lts: 4, casing: false, scale: 0.8 },

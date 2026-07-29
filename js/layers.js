@@ -1,6 +1,6 @@
 /** Data layer construction and visibility. */
 
-import { LAYERS, LTS, SOURCES } from './config.js';
+import { FAC_CONNECTOR, LAYERS, LTS, SOURCES } from './config.js';
 
 export const layerId = (e) => `${e.src}-lts${e.lts}`;
 
@@ -50,7 +50,12 @@ export function addLayers(map) {
     const style = LTS[entry.lts];
     const id = layerId(entry);
     const base = style.width * (entry.scale ?? 1);
-    const filter = ['==', ['get', 'lts'], entry.lts];
+    // Connectors are short synthetic links from a trail to the street it runs
+    // beside. Painted in the LTS 1 layer they read as real bike infrastructure
+    // -- 1,483 perpendicular green stubs, 49 ft median, that nobody built.
+    const filter = ['all',
+      ['==', ['get', 'lts'], entry.lts],
+      ['!=', ['coalesce', ['get', 'fac'], 0], FAC_CONNECTOR]];
 
     if (entry.casing) {
       map.addLayer({
@@ -93,6 +98,26 @@ export function addLayers(map) {
         // expressions not supported". That is why there is one layer per LTS
         // rather than a single data-driven layer.
         ...(style.dash ? { 'line-dasharray': style.dash } : {}),
+      },
+    });
+  }
+}
+
+/** Trail-to-street links, drawn as what they are: a hint that you can get
+ *  between the two here, not a facility. */
+export function addConnectorLayer(map) {
+  for (const src of SOURCES) {
+    const id = `${src}-connectors`;
+    if (map.getLayer(id) || !map.getSource(src)) continue;
+    map.addLayer({
+      id, type: 'line', source: src,
+      filter: ['==', ['coalesce', ['get', 'fac'], 0], FAC_CONNECTOR],
+      layout: { 'line-cap': 'butt' },
+      paint: {
+        'line-color': LTS[1].color,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.8, 17, 2],
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0, 15, 0.5],
+        'line-dasharray': [1, 1.5],
       },
     });
   }

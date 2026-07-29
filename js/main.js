@@ -6,7 +6,7 @@ import {
   loadMethodology, loadNetwork, loadStats,
 } from './data.js';
 import {
-  addLayers, addRouteLayers, addSources, hitLayers, setLtsVisible,
+  addConnectorLayer, addLayers, addRouteLayers, addSources, hitLayers, setLtsVisible,
   setRoute, setRouteAccess, setRouteEndpoints, setSourceVisible,
 } from './layers.js';
 import { clipToEnd } from './lib/graph.js';
@@ -637,6 +637,7 @@ async function boot() {
   map.on('load', async () => {
     addSources(map, manifest);
     addLayers(map);
+    addConnectorLayer(map);
     addRouteLayers(map);
 
     for (const lts of LTS_ORDER_LEGEND) {
