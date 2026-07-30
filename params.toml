@@ -293,11 +293,13 @@ max_inflation = 1.45
 
 connector_max_m = 25.0         # 162 of 254 off-road endpoints connect at 25 m
 
-# Minimum gap between attachment points along one path. Every vertex within
-# connector_max_m of a street is a candidate junction; without thinning, a trail
-# running parallel to a road sprouts a connector at every vertex and bloats the
-# graph without adding a useful junction.
+# Minimum gap between interior attachment points along one path. The closest
+# eligible target at each endpoint is always retained, even inside this window,
+# because endpoints are the obvious entrances and exits.
 attach_spacing_m = 120.0
+
+# Merge only attachment geometries that land at effectively the same place.
+attach_merge_m = 0.75
 
 # No path edge may exceed this. Attachment points only appear where a path meets
 # something else, so a rural trail can still run for miles as one edge -- and a

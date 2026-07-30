@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import math
 
+import geopandas as gpd
 import pytest
+from shapely import STRtree
 from shapely.geometry import LineString, MultiLineString
 
-from lexbike.conflate import bearing_delta, line_bearing
+from lexbike.conflate import _find_attachments, bearing_delta, line_bearing
 
 
 def test_bearing_of_cardinal_directions():
@@ -102,3 +104,33 @@ def test_perpendicular_crossing_is_rejected_by_the_tolerance():
     arterial = line_bearing(LineString([(50, -50), (50, 50)]))  # north-south
     assert bearing_delta(trail, arterial) == pytest.approx(90.0)
     assert bearing_delta(trail, arterial) > 30.0  # the configured tolerance
+
+
+def test_nearby_distinct_junctions_are_not_thinned_by_along_path_distance():
+    """Two streets near opposite ends of a short path are two real exits.
+
+    The old 120 m thinning window kept the first and silently dropped the
+    second. At Baptist Health that removed the 9 m connection to Hiltonia Park
+    and sent routes on a large detour.
+    """
+    path = LineString([(0, 0), (0, 100)])
+    targets = gpd.GeoDataFrame(
+        geometry=[
+            LineString([(-10, -1), (10, -1)]),
+            LineString([(-10, -2), (10, -2)]),
+            LineString([(-10, 101), (10, 101)]),
+        ],
+        crs=32616,
+    )
+
+    found = _find_attachments(
+        path,
+        targets,
+        STRtree(targets.geometry.values),
+        max_m=25,
+        spacing_m=120,
+        merge_m=0.75,
+    )
+
+    assert len(found) == 2
+    assert [round(item[0]) for item in found] == [0, 100]

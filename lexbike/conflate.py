@@ -329,10 +329,11 @@ def _check_mileage(
 #  Off-road paths and their connectors
 # ---------------------------------------------------------------------------
 
-def _find_attachments(part, candidates, tree, max_m, spacing_m):
+def _find_attachments(part, candidates, tree, max_m, spacing_m, merge_m):
     """Points along a path where it can join another line.
 
-    Returns ``[(distance_along_path, snapped_point_on_target, target_index)]``.
+    Returns ``[(distance_along_path, snapped_point_on_target, target_index,
+    source_vertex)]``.
 
     Three properties this needs, each learned by getting it wrong:
 
@@ -340,11 +341,11 @@ def _find_attachments(part, candidates, tree, max_m, spacing_m):
     streets must join both; querying only the nearest silently picks one and
     leaves the other unreachable.
 
-    Thinning per target, not by distance along the path. Blind thinning to one
-    attachment per ``spacing_m`` drops whichever junction happens to fall inside
-    the window -- including the one a route needed. Instead each target gets its
-    single closest attachment, so a path beside a long road connects once, while
-    a path crossing five roads in 100 m connects five times.
+    One best candidate per target, with light thinning between interior
+    candidates. A path beside one long road connects once rather than at every
+    vertex. Endpoints are exempt from the thinning window: applying it there
+    drops obvious entrances and exits, including the Hiltonia Park connection
+    at Baptist Health.
 
     Endpoints always attach if anything is in range. A trail's ends are where it
     most obviously meets the network, and they must never be thinned away.
@@ -376,11 +377,47 @@ def _find_attachments(part, candidates, tree, max_m, spacing_m):
     found = [(along, snapped, k, src) for k, (_, along, snapped, src) in best.items()]
     found.sort(key=lambda t: t[0])
 
-    # A final light thin, only between attachments to *different* targets that
-    # land in essentially the same place, which would add a node and no reach.
-    out = []
+    # First remove true duplicate geometry: different target records sometimes
+    # describe the same physical junction.
+    merged = []
     for item in found:
-        if out and item[0] - out[-1][0] < spacing_m:
+        if (
+            merged
+            and item[3].distance(merged[-1][3]) <= merge_m
+            and item[1].distance(merged[-1][1]) <= merge_m
+        ):
+            continue
+        merged.append(item)
+
+    # Keep the closest target at each endpoint. One is enough to enter the
+    # noded street graph; keeping every nearby centreline would connect a path
+    # to several parallel or adjacent roads at once. The old code could keep
+    # none because it applied the interior spacing window to endpoints too.
+    endpoint_best: dict[int, tuple[float, tuple]] = {}
+    for item in merged:
+        which = (
+            0 if item[0] <= 1e-6
+            else 1 if item[0] >= part.length - 1e-6
+            else None
+        )
+        if which is None:
+            continue
+        gap = item[3].distance(item[1])
+        if which not in endpoint_best or gap < endpoint_best[which][0]:
+            endpoint_best[which] = (gap, item)
+    endpoint_ids = {id(item) for _, item in endpoint_best.values()}
+
+    # Lightly thin interior attachments so a path parallel to a segmented
+    # street does not sprout a connector to every block. The closest endpoint
+    # attachment is always retained. This repairs the 9 m Baptist
+    # Health-to-Hiltonia Park connection without broadly joining every road
+    # inside the search radius.
+    out = []
+    for item in merged:
+        is_endpoint = item[0] <= 1e-6 or item[0] >= part.length - 1e-6
+        if is_endpoint and id(item) not in endpoint_ids:
+            continue
+        if out and item[0] - out[-1][0] < spacing_m and not is_endpoint:
             continue
         out.append(item)
     return out
@@ -450,15 +487,17 @@ def build_off_road(
     the destination.
 
     So every vertex within ``conflation.connector_max_m`` of an eligible
-    centreline is a candidate junction, thinned to one per
+    centreline is a candidate junction. Interior candidates are thinned by
     ``conflation.attach_spacing_m`` so a trail running parallel to a street does
-    not sprout a connector at every vertex. The path is cut at each surviving
-    point, which is what turns it into something a route can join partway along.
+    not sprout a connector at every block; the closest eligible target at each
+    endpoint is always kept. The path is cut at each surviving point, which is
+    what turns it into something a route can join partway along.
     """
     from .network import cut_line
 
     max_m = float(params["conflation.connector_max_m"])
     spacing_m = float(params["conflation.attach_spacing_m"])
+    merge_m = float(params["conflation.attach_merge_m"])
     max_edge_m = float(params["conflation.max_path_edge_m"])
     excluded = set(int(x) for x in params["conflation.exclude_rdclass"])
 
@@ -497,7 +536,7 @@ def build_off_road(
             if part.length <= 0:
                 continue
             attachments = _find_attachments(
-                part, candidates, tree, max_m, spacing_m)
+                part, candidates, tree, max_m, spacing_m, merge_m)
             attachments += _find_path_junctions(
                 part, i, off, path_tree, max_m)
             # One list, sorted, so the cut points below stay in order.
@@ -549,7 +588,7 @@ def build_off_road(
 
     log.info(
         "off-road: %d paths -> %d pieces, %d attachment points, %d connectors "
-        "(max %.0f m, one per %.0f m)",
+        "(max %.0f m, interior spacing %.0f m)",
         len(off), len(path_rows), attach_count, len(connectors), max_m, spacing_m,
     )
     if len(off) and attach_count == 0:
