@@ -2,7 +2,7 @@
 
 How comfortable is each street in Lexington, Kentucky to ride a bike on?
 
-This computes a **Level of Traffic Stress (LTS)** rating for all 1,752 miles of
+This computes a **Level of Traffic Stress (LTS)** rating for all 1,776 miles of
 Lexington's street network — not just the streets that already have bike
 infrastructure — and analyses how well the low-stress parts connect to each
 other.
@@ -13,9 +13,9 @@ Live map: <https://nickarsenaultxyz.github.io/Lex-Bike-Data/>
 
 ## The finding
 
-> **About 1,227 miles are ridable for a confident rider, in one nearly-whole
-> network. But the 926 miles that are comfortable for an ordinary adult are
-> shattered into 929 disconnected islands, and the largest holds only 18% of
+> **About 1,248 miles are ridable for a confident rider, in one nearly-whole
+> network. But the 947 miles that are comfortable for an ordinary adult are
+> shattered into 936 disconnected islands, and the largest holds only 19% of
 > them.**
 
 Lexington's problem is not a shortage of quiet streets. It is that the quiet
@@ -32,10 +32,10 @@ does not move at all across every variant tested. See
 
 | LTS | Label | Who it is for | Miles |
 |----:|---|---|----:|
-| 1 | Relaxed | Kids and new riders | 221.5 |
-| 2 | Comfortable for most adults | Quiet streets and bike lanes | 700.6 |
-| 3 | Busy | Confident riders | 301.4 |
-| 4 | Stressful | Experienced riders only | 398.1 |
+| 1 | Relaxed | Kids and new riders | 244.7 |
+| 2 | Comfortable for most adults | Quiet streets and bike lanes | 702.1 |
+| 3 | Busy | Confident riders | 301.1 |
+| 4 | Stressful | Experienced riders only | 396.9 |
 | 0 | Bikes not permitted | Interstates and parkways | 130.9 |
 
 The scale is 0–4. **There is no LTS 5.** Furth and Mekuria define 1–4, and an
@@ -130,6 +130,7 @@ centrelines canonical removes that entire class of problem.
 | `lex_street_data.geojson` | LFUCG | 13,775 street centrelines |
 | `Bicycle_Network_Master.geojson` | LFUCG | 542 bike facility segments |
 | `StaList_Fayette (1).csv` | KYTC | 546 traffic count stations |
+| Live Overpass query | OpenStreetMap | County-scoped cycleways and bicycle-designated paths |
 
 A scheduled GitHub Actions build downloads the current
 [LFUCG Bicycle Network Public View](https://www.arcgis.com/home/item.html?id=90961d8f5c854453abf4123d4a99e139)
@@ -138,6 +139,14 @@ FeatureServer count, and the normal schema, classification, regression and size
 checks must all pass before the map is deployed. If LFUCG is unavailable or
 publishes a breaking schema change, the build fails and the last good map stays
 online.
+
+The same build queries the
+[Fayette County OSM relation](https://www.openstreetmap.org/relation/130537)
+for unambiguous off-road cycling paths. Paths already represented by LFUCG are
+removed by a geometry-overlap check; every remaining OSM segment is marked in
+the download and attributed on the map. A failed, empty, or unexpectedly large
+OSM response also stops deployment instead of silently reverting the public map
+to LFUCG-only data.
 
 A note on the bike layer, because it is easy to misread: `Type_Facility` is the
 facility that physically exists. `AltType_Facility` is a *recommended upgrade*,
@@ -160,12 +169,12 @@ ride here" — which is also the order they are needed in:
 
 | File | Gzipped | Purpose |
 |---|--:|---|
-| `network.geojson` | 55 KB | built bike facilities and trails — the only thing on the critical path |
-| `context.geojson` | 157 KB | busy and prohibited roads, fetched right after |
-| `residential.geojson` | 352 KB | quiet streets, fetched only when switched on |
-| `graph.json` | 195 KB | 10,842 nodes, for client-side routing |
-| `gaps.json` / `gaps.geojson` | 24 KB | 316 ranked barrier crossings |
-| `islands.json` | 4 KB | connected low-stress components |
+| `network.geojson` | 103 KB | built bike facilities and trails — the only thing on the critical path |
+| `context.geojson` | 164 KB | busy and prohibited roads, fetched right after |
+| `residential.geojson` | 367 KB | quiet streets, fetched only when switched on |
+| `graph.json` | 218 KB | 11,941 nodes, for client-side routing |
+| `gaps.json` / `gaps.geojson` | 11 KB | 317 ranked barrier crossings |
+| `islands.json` | 5 KB | connected low-stress components |
 | `stats.json`, `methodology.json`, `manifest.json`, `planned.geojson`, `council.json` | < 2 KB each | |
 
 ## Using it without a mouse
@@ -194,9 +203,9 @@ that does everything the map does.
 A bare link is not much use for advocacy, so every share composes the
 **statistic alongside the URL** — a pasted link carries its own argument:
 
-> Lexington has 925.8 miles of streets comfortable for an ordinary adult to bike
-> on — but they are split into 929 disconnected islands, and the largest holds
-> only 18.3% of them.
+> Lexington has 946.9 miles of streets comfortable for an ordinary adult to bike
+> on — but they are split into 936 disconnected islands, and the largest holds
+> only 18.7% of them.
 
 The link restores exactly what you were looking at: location, zoom, which
 ratings are shown, and any selected street. The text is generated from the live

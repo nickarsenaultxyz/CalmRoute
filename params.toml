@@ -327,27 +327,29 @@ barrier_min_island_segments = 3
 #  Supplementary paths from OpenStreetMap
 # ---------------------------------------------------------------------------
 #
-#  OFF BY DEFAULT. Turn on with `--set osm.enabled=true`.
+#  Enabled for the public build. A failed or out-of-range OSM fetch stops the
+#  deployment, so the live map cannot silently fall back to LFUCG-only data.
 #
-#  LFUCG has 62.6 mi of off-road facility; OSM has 200.7 mi of cycleway and
-#  bicycle=designated path in Fayette County, 153.5 mi of it more than 15 m from
-#  anything the city file contains -- campus paths, apartment connectors, park
-#  links.
+#  The Fayette County OSM relation currently has 70.0 mi of cycleway and
+#  bicycle=designated path. After de-duplication, 21.0 mi is not already in the
+#  LFUCG layer -- campus paths, apartment connectors and park links.
 #
 #  This is importable where OSM *streets* are not. A path separated from traffic
 #  is LTS 1 by definition, which is already how LFUCG paths are rated, so
 #  nothing has to be inferred and nothing is conflated onto a centreline. OSM's
 #  261 mi of untagged paved footway is excluded: almost all of it is sidewalk.
 #
-#  LICENSING: OpenStreetMap is ODbL. Publishing this requires attribution, and a
-#  produced database mixing it in is likely subject to share-alike. That is the
-#  project owner's decision, which is why this defaults to off.
+#  LICENSING: OpenStreetMap is ODbL. The map carries permanent attribution and
+#  the published derived data remains openly downloadable.
 
 [osm]
-enabled = false
+enabled = true
 overpass_url = "https://overpass-api.de/api/interpreter"
-county_area = "Fayette County"
+# Fayette County, Kentucky. Selecting on the name alone also matches Fayette
+# counties in several other states; the stable OSM relation id is unambiguous.
+relation_id = 130537
 fetch_timeout_s = 150
+fetch_attempts = 3
 
 # A way is a duplicate when most of its length runs inside a buffer around the
 # existing off-road network. Length-based, so a trail digitized with different
@@ -357,10 +359,10 @@ dedupe_max_overlap = 0.5
 
 # Refuse an import wildly outside what was measured, so a bad Overpass day or an
 # edit war cannot silently swing the "bike network" between builds.
-expect_min_miles = 100.0
-expect_max_miles = 220.0
+expect_min_miles = 10.0
+expect_max_miles = 40.0
 
-attribution = "Supplementary paths (c) OpenStreetMap contributors, ODbL"
+attribution = "Supplementary paths © OpenStreetMap contributors, ODbL"
 
 
 # ---------------------------------------------------------------------------
@@ -451,7 +453,7 @@ sensitivity_flip_forces_low = true
 [[sensitivity.runs]]
 name = "mixed_35mph_as_lts2"
 set = { "lts.mixed.speed_35_lts" = 2 }
-why = "Dominant parameter. Measured: largest island 59.1% vs 18.3%, 1,601 segments changed."
+why = "Dominant parameter. Measured: largest island 58.9% vs 18.7%, 1,623 segments changed."
 
 [[sensitivity.runs]]
 name = "aadt_break_2000"
@@ -476,7 +478,7 @@ why = "Upper bound on conflation aggressiveness."
 [[sensitivity.runs]]
 name = "connector_15m"
 set = { "conflation.connector_max_m" = 15.0 }
-why = "Off-road trail attachment. Measured: barely matters, 18.3% either way."
+why = "Off-road trail attachment. Measured: barely matters, 18.5% vs 18.7%."
 
 [[sensitivity.runs]]
 name = "connector_40m"

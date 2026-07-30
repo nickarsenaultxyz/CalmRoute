@@ -37,6 +37,12 @@ export function render(methodology, stats) {
 
   const limits = (stats?.limitations || [])
     .map((l) => `<li>${escapeHtml(l)}</li>`).join('');
+  const osmSource = stats?.osm_paths?.enabled
+    ? ` Supplementary off-road paths from
+      <a href="https://www.openstreetmap.org/copyright"
+         target="_blank" rel="noopener">OpenStreetMap contributors</a>
+      under the ODbL.`
+    : '';
 
   return `
     <p>Every street gets a <b>Level of Traffic Stress</b> rating: how comfortable
@@ -87,7 +93,7 @@ export function render(methodology, stats) {
         stats?.data_sources?.aadt_count_years?.min
           ? ` (${stats.data_sources.aadt_count_years.min}–${stats.data_sources.aadt_count_years.max})`
           : ''}.
-      Ratings describe <b>built</b> infrastructure only.
+      ${osmSource} Ratings describe <b>built</b> infrastructure only.
     </p>
     <p class="tech">
       Ruleset ${escapeHtml(methodology?.ruleset_version || '')}

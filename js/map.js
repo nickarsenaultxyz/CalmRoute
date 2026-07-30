@@ -74,7 +74,13 @@ export function createMap(manifest, initial = {}) {
     minZoom: 9,
     maxZoom: 19,
     keyboard: true,
-    attributionControl: { compact: true },
+    attributionControl: {
+      compact: true,
+      customAttribution:
+        '<a href="https://www.openstreetmap.org/copyright" '
+        + 'target="_blank" rel="noopener">Supplementary paths © '
+        + 'OpenStreetMap contributors (ODbL)</a>',
+    },
   });
 
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');

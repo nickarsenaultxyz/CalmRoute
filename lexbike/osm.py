@@ -1,10 +1,9 @@
 """Supplementary off-road paths from OpenStreetMap.
 
-LFUCG's bike layer carries 62.6 miles of off-road facility. OSM carries 200.7
-miles of ``highway=cycleway`` and ``bicycle=designated`` path in Fayette County,
-of which 153.5 miles is more than 15 m from anything LFUCG has -- including
-campus paths, apartment-complex connectors and park links that the city file
-simply does not contain.
+The county-scoped OSM query currently carries 70.0 miles of
+``highway=cycleway`` and ``bicycle=designated`` path. After removing paths
+already present in LFUCG, 21.0 miles remain -- including campus paths,
+apartment-complex connectors and park links that the city file does not contain.
 
 **Why this is importable when OSM streets are not.** Earlier work ruled out
 mixing OSM into the pipeline, on the grounds that it would introduce a second
@@ -22,14 +21,16 @@ precision this project exists to avoid.
 
 **Licensing.** OpenStreetMap data is ODbL. Anything published from it must carry
 attribution, and a produced database mixing it in is likely subject to
-share-alike. That is a decision for the project owner, which is why this import
-is off unless ``osm.enabled`` is set.
+share-alike. The public map supplies permanent attribution and leaves its
+derived artifacts openly downloadable.
 """
 
 from __future__ import annotations
 
+import http.client
 import json
 import logging
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -51,7 +52,8 @@ CACHE = Path(".cache/osm_cycleways.json")
 #: (a paved footway, a desire line through a park) is left out.
 QUERY = """
 [out:json][timeout:{timeout}];
-area["name"="{county}"]["admin_level"="6"]->.a;
+rel({relation_id});
+map_to_area->.a;
 (
   way(area.a)["highway"="cycleway"];
   way(area.a)["highway"~"^(path|footway)$"]["bicycle"="designated"];
@@ -67,8 +69,9 @@ class OsmError(Exception):
 def fetch(params: Params, *, use_cache: bool = True) -> gpd.GeoDataFrame | None:
     """Download cycleways from Overpass, or read the local cache.
 
-    Returns ``None`` when unavailable; the build then proceeds with LFUCG data
-    alone rather than failing.
+    Returns ``None`` only when the OSM layer is disabled. Once it is enabled,
+    an unavailable or malformed response fails the build: silently publishing
+    an LFUCG-only map would make a successful deployment misrepresent its data.
     """
     if not params.get("osm.enabled", False):
         return None
@@ -80,23 +83,49 @@ def fetch(params: Params, *, use_cache: bool = True) -> gpd.GeoDataFrame | None:
     endpoint = params["osm.overpass_url"]
     query = QUERY.format(
         timeout=int(params["osm.fetch_timeout_s"]),
-        county=params["osm.county_area"],
+        relation_id=int(params["osm.relation_id"]),
     )
     log.info("osm paths: querying %s", endpoint)
-    try:
-        req = urllib.request.Request(
-            endpoint,
-            data=urllib.parse.urlencode({"data": query}).encode(),
-            headers={"User-Agent": "lexbike-lts-build (+github.com/nickarsenaultxyz/Lex-Bike-Data)"},
-        )
-        with urllib.request.urlopen(req, timeout=int(params["osm.fetch_timeout_s"])) as resp:
-            payload = json.loads(resp.read())
-    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-        log.warning(
-            "osm paths unavailable (%s: %s); building from LFUCG data alone",
-            type(exc).__name__, exc,
-        )
-        return None
+    attempts = int(params["osm.fetch_attempts"])
+    payload = None
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            req = urllib.request.Request(
+                endpoint,
+                data=urllib.parse.urlencode({"data": query}).encode(),
+                headers={
+                    "User-Agent":
+                        "lexbike-lts-build (+github.com/nickarsenaultxyz/Lex-Bike-Data)"
+                },
+            )
+            with urllib.request.urlopen(
+                req, timeout=int(params["osm.fetch_timeout_s"])
+            ) as resp:
+                payload = json.loads(resp.read())
+            break
+        except (
+            http.client.IncompleteRead,
+            urllib.error.URLError,
+            TimeoutError,
+            OSError,
+            ValueError,
+        ) as exc:
+            last_error = exc
+            if attempt < attempts:
+                delay = attempt * 2
+                log.warning(
+                    "osm paths: attempt %d/%d failed (%s: %s); retrying in %ds",
+                    attempt, attempts, type(exc).__name__, exc, delay,
+                )
+                time.sleep(delay)
+
+    if payload is None:
+        raise OsmError(
+            f"OSM paths unavailable after {attempts} attempts "
+            f"({type(last_error).__name__}: {last_error}); "
+            "refusing to publish an LFUCG-only fallback"
+        ) from last_error
 
     CACHE.parent.mkdir(parents=True, exist_ok=True)
     CACHE.write_text(json.dumps(payload))
@@ -121,8 +150,7 @@ def _parse(payload: dict, params: Params) -> gpd.GeoDataFrame | None:
             "geometry": LineString(coords),
         })
     if not rows:
-        log.warning("osm paths: query returned nothing usable")
-        return None
+        raise OsmError("OSM path query returned nothing usable")
 
     gdf = gpd.GeoDataFrame(rows, geometry="geometry", crs=4326)
     log.info(

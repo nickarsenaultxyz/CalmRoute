@@ -96,6 +96,16 @@ def test_properties_the_ui_reads_are_present(features):
         assert key in present, f"the UI reads properties.{key}"
 
 
+def test_enabled_osm_build_preserves_path_provenance(manifest):
+    stats = load(manifest["files"]["stats"])
+    if not stats.get("osm_paths", {}).get("enabled"):
+        pytest.skip("OSM supplement disabled for this build")
+    network = load(manifest["files"]["network"])["features"]
+    osm = [f for f in network if f["properties"].get("src") == "osm"]
+    assert osm, "an OSM-enabled build must export auditable OSM path provenance"
+    assert all(f["properties"]["fac"] == 6 for f in osm)
+
+
 def test_no_property_is_ever_null(features):
     """detail.js branches on key presence to distinguish 'not measured' from a
     value. A null would render as a blank cell -- the bug this replaces."""

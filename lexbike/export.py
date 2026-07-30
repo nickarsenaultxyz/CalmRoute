@@ -176,6 +176,11 @@ def _feature(row, decimals: int) -> dict:
     if isl is not None and not pd.isna(isl) and int(isl) >= 0:
         props["isl"] = int(isl)
 
+    # Omit the common LFUCG value and mark only supplemental OSM paths. This
+    # preserves auditable provenance without repeating a string on every road.
+    if row.get("source") == "osm":
+        props["src"] = "osm"
+
     return {
         "type": "Feature",
         "id": int(row["id"]),
@@ -345,7 +350,10 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
         },
         "data_sources": {
             "street_centrelines": "LFUCG",
-            "bike_facilities": "LFUCG",
+            "bike_facilities": (
+                "LFUCG + OpenStreetMap supplementary paths"
+                if params.get("osm.enabled", False) else "LFUCG"
+            ),
             "traffic_counts": "KYTC",
             "aadt_count_years": extra.get("aadt_years", {}),
             "aadt_measured_segments": extra.get("aadt_measured", 0),

@@ -1,12 +1,12 @@
 {
   "ruleset_version": "2.0.0",
-  "params_digest": "5fce9ee8d918",
+  "params_digest": "0ec0ae9daa6b",
   "note": "Regenerate deliberately, never automatically: this file is what makes an unintended rule change visible.",
   "values": {
-    "total_miles": 1754.7,
-    "low_stress_miles": 925.8,
-    "ridable_lts3_miles": 1226.9,
-    "islands": 929,
-    "largest_island_miles": 169.8
+    "total_miles": 1775.7,
+    "low_stress_miles": 946.9,
+    "ridable_lts3_miles": 1248.0,
+    "islands": 936,
+    "largest_island_miles": 176.7
   }
 }

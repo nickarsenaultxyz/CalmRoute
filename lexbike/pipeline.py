@@ -523,7 +523,7 @@ def assemble_edges(streets, paths, connectors, params: Params):
 
     keep = [
         "id", "geometry", "kind", "fac", "lts", "rdclass", "lanes",
-        "speed_mph", "aadt", "aadt_src", "road_name",
+        "speed_mph", "aadt", "aadt_src", "road_name", "source",
     ]
     out = pd.concat(
         [f.reindex(columns=[c for c in keep if c in f.columns or c == "geometry"])

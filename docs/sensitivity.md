@@ -1,6 +1,6 @@
 # Sensitivity of the LTS results to parameter choices
 
-Ruleset 2.0.0 (digest `5fce9ee8d918`).
+Ruleset 2.0.0 (digest `0ec0ae9daa6b`).
 Regenerate with `make sensitivity`.
 
 Several thresholds in this model are judgement calls, not measurements.
@@ -9,21 +9,21 @@ choice and see immediately how much it would change.
 
 | variant | low-stress mi | islands | largest island | share | LTS<=3 mi | segments changed |
 |---|--:|--:|--:|--:|--:|--:|
-| `baseline` | 925.8 | 929 | 169.8 mi | 18.3% | 1226.9 | 0 |
-| `mixed_35mph_as_lts2` | 1113.1 | 497 | 657.7 mi | 59.1% | 1226.9 | 1601 |
-| `aadt_break_2000` | 921.5 | 950 | 166.9 mi | 18.1% | 1226.9 | 54 |
-| `aadt_break_5000` | 1007.9 | 610 | 256.6 mi | 25.5% | 1226.9 | 997 |
-| `conflation_buffer_20m` | 928.2 | 930 | 169.9 mi | 18.3% | 1228.1 | 35 |
-| `connector_15m` | 925.8 | 934 | 169.5 mi | 18.3% | 1226.9 | 107 |
-| `connector_40m` | 925.8 | 912 | 174.4 mi | 18.8% | 1226.9 | 95 |
+| `baseline` | 946.9 | 936 | 176.7 mi | 18.7% | 1248.0 | 0 |
+| `mixed_35mph_as_lts2` | 1134.1 | 505 | 668.4 mi | 58.9% | 1248.0 | 1623 |
+| `aadt_break_2000` | 942.5 | 957 | 173.9 mi | 18.4% | 1248.0 | 54 |
+| `aadt_break_5000` | 1028.9 | 616 | 263.5 mi | 25.6% | 1248.0 | 1005 |
+| `conflation_buffer_20m` | 949.3 | 937 | 176.8 mi | 18.6% | 1249.1 | 35 |
+| `connector_15m` | 946.9 | 949 | 175.6 mi | 18.5% | 1248.0 | 215 |
+| `connector_40m` | 946.9 | 909 | 186.2 mi | 19.7% | 1248.0 | 133 |
 
 ## What each variant tests
 
-- **`mixed_35mph_as_lts2`** — Dominant parameter. Measured: largest island 59.1% vs 18.3%, 1,601 segments changed.
+- **`mixed_35mph_as_lts2`** — Dominant parameter. Measured: largest island 58.9% vs 18.7%, 1,623 segments changed.
 - **`aadt_break_2000`** — 995 imputed RDCLASS-5 segments at 25 mph hinge on this threshold.
 - **`aadt_break_5000`** — Upper bound on the same question.
 - **`conflation_buffer_20m`** — Upper bound on conflation aggressiveness.
-- **`connector_15m`** — Off-road trail attachment. Measured: barely matters, 18.3% either way.
+- **`connector_15m`** — Off-road trail attachment. Measured: barely matters, 18.5% vs 18.7%.
 - **`connector_40m`** — Tests whether trail connectivity is an artifact of the radius.
 
 ## Variants that could not be built
@@ -36,7 +36,7 @@ gate, so the sweep could not explore that direction.
 
 ## How this feeds the map
 
-2755 segments change LTS under at least one variant. Those are
+2868 segments change LTS under at least one variant. Those are
 marked low-confidence in the published data, so the map can distinguish a
 rating that is robust from one that rests on a contested threshold.
 
