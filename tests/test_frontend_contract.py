@@ -96,6 +96,16 @@ def test_properties_the_ui_reads_are_present(features):
         assert key in present, f"the UI reads properties.{key}"
 
 
+def test_enabled_osm_build_preserves_path_provenance(manifest):
+    stats = load(manifest["files"]["stats"])
+    if not stats.get("osm_paths", {}).get("enabled"):
+        pytest.skip("OSM supplement disabled for this build")
+    network = load(manifest["files"]["network"])["features"]
+    osm = [f for f in network if f["properties"].get("src") == "osm"]
+    assert osm, "an OSM-enabled build must export auditable OSM path provenance"
+    assert all(f["properties"]["fac"] == 6 for f in osm)
+
+
 def test_no_property_is_ever_null(features):
     """detail.js branches on key presence to distinguish 'not measured' from a
     value. A null would render as a blank cell -- the bug this replaces."""
@@ -187,6 +197,18 @@ def test_critical_path_stays_within_budget(manifest):
     quietly reintroduce a multi-megabyte first paint."""
     import gzip
 
+    import tomllib
+
+    with open("params.toml", "rb") as fh:
+        params = tomllib.load(fh)
+    # Read what the build actually did, not what params.toml says: `--set
+    # osm.enabled=true` never touches the file, so trusting the file here made
+    # this test fail against a perfectly valid OSM build.
+    stats = load(manifest["files"]["stats"])
+    budget = params["export"]["budget_kb"]["network.geojson"]
+    if stats.get("osm_paths", {}).get("enabled"):
+        budget = params["export"]["budget_kb_osm"]["network.geojson"]
+
     raw = (DATA / manifest["files"]["network"]).read_bytes()
     kb = len(gzip.compress(raw, 6)) / 1024
-    assert kb < 90, f"critical path is {kb:.0f} KB gzipped"
+    assert kb < budget, f"critical path is {kb:.0f} KB gzipped against {budget}"

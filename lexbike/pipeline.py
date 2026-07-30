@@ -21,7 +21,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 
-from . import conflate, council, export, io, network
+from . import conflate, council, export, io, network, osm as osm_mod
 from . import lts as lts_mod
 from .params import Params
 
@@ -129,7 +129,21 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
              len(existing), len(funded))
 
     streets = conflate.conflate_on_road(streets, existing, params)
-    paths, connectors = conflate.build_off_road(streets, existing, params)
+
+    # Supplementary OSM paths, if enabled. They join the same off-road pipeline
+    # rather than a parallel one, so they get the same connectors, the same
+    # splitting and the same rating rule.
+    off_road_input = existing
+    osm_paths = osm_mod.fetch(params)
+    if osm_paths is not None:
+        osm_paths = osm_mod.dedupe(osm_paths, existing, params)
+        osm_paths = osm_mod.as_facilities(osm_paths, params)
+        osm_mod.quality_gate(osm_paths, params)
+        off_road_input = pd.concat([existing, osm_paths], ignore_index=True)
+        off_road_input = gpd.GeoDataFrame(
+            off_road_input, geometry="geometry", crs=existing.crs)
+
+    paths, connectors = conflate.build_off_road(streets, off_road_input, params)
 
     # Split centrelines where trail connectors attach, before classification, so
     # both pieces inherit the parent's speed, volume and facility.
@@ -509,7 +523,7 @@ def assemble_edges(streets, paths, connectors, params: Params):
 
     keep = [
         "id", "geometry", "kind", "fac", "lts", "rdclass", "lanes",
-        "speed_mph", "aadt", "aadt_src", "road_name",
+        "speed_mph", "aadt", "aadt_src", "road_name", "source",
     ]
     out = pd.concat(
         [f.reindex(columns=[c for c in keep if c in f.columns or c == "geometry"])

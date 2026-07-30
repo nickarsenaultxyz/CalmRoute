@@ -386,6 +386,20 @@ def _find_attachments(part, candidates, tree, max_m, spacing_m):
     return out
 
 
+def _with_max_spacing(cuts: list[float], total: float, max_edge_m: float) -> list[float]:
+    """Add cuts so no resulting piece is longer than ``max_edge_m``."""
+    out = list(cuts)
+    edges = [0.0, *cuts, total]
+    for a, b in zip(edges, edges[1:]):
+        gap = b - a
+        if gap <= max_edge_m:
+            continue
+        n = int(gap // max_edge_m)
+        step = gap / (n + 1)
+        out.extend(a + step * (i + 1) for i in range(n))
+    return sorted(out)
+
+
 def _find_path_junctions(part, self_index, off, path_tree, max_m):
     """Points where this path comes close to a *different* path.
 
@@ -445,6 +459,7 @@ def build_off_road(
 
     max_m = float(params["conflation.connector_max_m"])
     spacing_m = float(params["conflation.attach_spacing_m"])
+    max_edge_m = float(params["conflation.max_path_edge_m"])
     excluded = set(int(x) for x in params["conflation.exclude_rdclass"])
 
     st = io.to_working_crs(streets, params).reset_index(drop=True)
@@ -493,6 +508,9 @@ def build_off_road(
             # real nodes. Endpoints need no cut; they already are nodes.
             interior = sorted(
                 d for d, _, _, _ in attachments if 1e-6 < d < part.length - 1e-6)
+            # Guarantee a node at least every max_path_edge_m, so a long rural
+            # trail is not one edge a route can only leave at its ends.
+            interior = _with_max_spacing(interior, part.length, max_edge_m)
             pieces = cut_line(part, interior) if interior else [part]
             for piece in pieces:
                 row = dict(template)
