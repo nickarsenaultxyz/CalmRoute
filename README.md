@@ -130,7 +130,7 @@ centrelines canonical removes that entire class of problem.
 | `lex_street_data.geojson` | LFUCG | 13,775 street centrelines |
 | `Bicycle_Network_Master.geojson` | LFUCG | 542 bike facility segments |
 | `StaList_Fayette (1).csv` | KYTC | 546 traffic count stations |
-| Live Overpass query | OpenStreetMap | County-scoped cycleways and bicycle-designated paths |
+| Live Overpass query | OpenStreetMap | County-scoped cycleways, bicycle-designated paths and explicitly bike-authorized access roads |
 
 A scheduled GitHub Actions build downloads the current
 [LFUCG Bicycle Network Public View](https://www.arcgis.com/home/item.html?id=90961d8f5c854453abf4123d4a99e139)
@@ -142,11 +142,13 @@ online.
 
 The same build queries the
 [Fayette County OSM relation](https://www.openstreetmap.org/relation/130537)
-for unambiguous off-road cycling paths. Paths already represented by LFUCG are
-removed by a geometry-overlap check; every remaining OSM segment is marked in
-the download and attributed on the map. A failed, empty, or unexpectedly large
-OSM response also stops deployment instead of silently reverting the public map
-to LFUCG-only data.
+for unambiguous off-road cycling paths and service roads carrying explicit
+bicycle permission. Parking aisles, private access and one-way service roads are
+excluded. Geometry already represented by LFUCG is removed by an overlap check;
+every remaining OSM segment is marked in the download and attributed on the
+map. Access roads are conservatively rated LTS 3 and do not count as bike
+facilities. A failed, empty, or unexpectedly large OSM response also stops
+deployment instead of silently reverting the public map to LFUCG-only data.
 
 A note on the bike layer, because it is easy to misread: `Type_Facility` is the
 facility that physically exists. `AltType_Facility` is a *recommended upgrade*,

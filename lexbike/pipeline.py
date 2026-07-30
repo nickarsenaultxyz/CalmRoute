@@ -130,13 +130,13 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
 
     streets = conflate.conflate_on_road(streets, existing, params)
 
-    # Supplementary OSM paths, if enabled. They join the same off-road pipeline
-    # rather than a parallel one, so they get the same connectors, the same
-    # splitting and the same rating rule.
+    # Supplementary OSM paths and explicitly bicycle-authorized service roads,
+    # if enabled. They join the same geometry attachment pipeline rather than a
+    # parallel graph; access roads receive no bike-facility credit below.
     off_road_input = existing
     osm_paths = osm_mod.fetch(params)
     if osm_paths is not None:
-        osm_paths = osm_mod.dedupe(osm_paths, existing, params)
+        osm_paths = osm_mod.dedupe(osm_paths, existing, params, streets=streets)
         osm_paths = osm_mod.as_facilities(osm_paths, params)
         osm_mod.quality_gate(osm_paths, params)
         off_road_input = pd.concat([existing, osm_paths], ignore_index=True)
@@ -496,16 +496,28 @@ def assemble_edges(streets, paths, connectors, params: Params):
 
     if len(paths):
         p = paths.copy()
-        p["kind"] = "facility"
-        # A path is off the traffic stream: no speed, no volume, no road class.
+        role = (
+            p["osm_role"].fillna("path")
+            if "osm_role" in p.columns
+            else pd.Series("path", index=p.index)
+        )
+        access = role == "access"
+        p["kind"] = np.where(access, "street", "facility")
+        # Paths and access links have no LFUCG traffic record. An explicitly
+        # bicycle-authorized service road is kept conservative (LTS 3 by
+        # default) and is not presented or counted as a bike facility.
         p["rdclass"] = 6
         p["lanes"] = 1
         p["speed_mph"] = pd.NA
         p["aadt"] = pd.NA
         p["aadt_src"] = io.AADT_IMPUTED_COARSE
         p["road_name"] = p.get("network_name", pd.Series(dtype="string"))
-        p["lts"] = rules.path_lts if "path" in rules.facility_rank else 1
-        p["fac"] = "path"
+        p["lts"] = np.where(
+            access,
+            int(params["osm.access_lts"]),
+            rules.path_lts if "path" in rules.facility_rank else 1,
+        )
+        p["fac"] = np.where(access, "none", "path")
         frames.append(p)
 
     if len(connectors):
@@ -523,7 +535,7 @@ def assemble_edges(streets, paths, connectors, params: Params):
 
     keep = [
         "id", "geometry", "kind", "fac", "lts", "rdclass", "lanes",
-        "speed_mph", "aadt", "aadt_src", "road_name", "source",
+        "speed_mph", "aadt", "aadt_src", "road_name", "source", "osm_role",
     ]
     out = pd.concat(
         [f.reindex(columns=[c for c in keep if c in f.columns or c == "geometry"])

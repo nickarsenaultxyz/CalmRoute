@@ -14,12 +14,12 @@ import {
 import { clipToEnd } from './lib/graph.js';
 import { announce, easeTo, isCoarsePointer } from './lib/a11y.js';
 import { debounce, onPopState, read, write } from './lib/urlstate.js';
-import { checkSupport, createMap, setBasemap } from './map.js?v=20260730-osm-network';
+import { checkSupport, createMap, setBasemap } from './map.js?v=20260730-bike-access-roads';
 import { Panel } from './panel.js';
 import * as browse from './views/browse.js';
-import * as detail from './views/detail.js?v=20260730-osm-network';
+import * as detail from './views/detail.js?v=20260730-bike-access-roads';
 import * as legend from './views/legend.js';
-import * as methodology from './views/methodology.js?v=20260730-osm-network';
+import * as methodology from './views/methodology.js?v=20260730-bike-access-roads';
 import * as routeView from './views/route.js';
 import * as settings from './views/settings.js';
 import * as share from './views/share.js';

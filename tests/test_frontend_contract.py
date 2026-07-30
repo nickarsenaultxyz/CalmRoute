@@ -96,14 +96,77 @@ def test_properties_the_ui_reads_are_present(features):
         assert key in present, f"the UI reads properties.{key}"
 
 
-def test_enabled_osm_build_preserves_path_provenance(manifest):
+def test_enabled_osm_build_preserves_provenance_and_access_policy(manifest, features):
     stats = load(manifest["files"]["stats"])
     if not stats.get("osm_paths", {}).get("enabled"):
         pytest.skip("OSM supplement disabled for this build")
-    network = load(manifest["files"]["network"])["features"]
-    osm = [f for f in network if f["properties"].get("src") == "osm"]
-    assert osm, "an OSM-enabled build must export auditable OSM path provenance"
-    assert all(f["properties"]["fac"] == 6 for f in osm)
+
+    osm = [f for f in features if f["properties"].get("src") == "osm"]
+    paths = [f for f in osm if f["properties"]["fac"] == 6]
+    access = [f for f in osm if f["properties"]["fac"] == 0]
+    assert paths, "an OSM-enabled build must export auditable path provenance"
+    assert access, "explicitly bicycle-authorized access roads must reach the graph"
+    assert all(f["properties"]["lts"] == 3 for f in access)
+    assert all(f["properties"]["kind"] == 0 for f in access)
+
+    names = {f["properties"].get("nm") for f in access}
+    assert "Baptist Health Entrance 1" in names
+    assert stats["osm_paths"]["access_roads"]["segments"] == len(access)
+    assert stats["osm_paths"]["access_roads"]["miles"] > 0
+
+
+def test_baptist_health_cut_through_is_routable(manifest, features):
+    access = [
+        f for f in features
+        if f["properties"].get("src") == "osm"
+        and f["properties"].get("nm") == "Baptist Health Entrance 1"
+    ]
+    if not access:
+        pytest.skip("OSM access-road supplement disabled for this build")
+
+    graph = load(manifest["files"]["graph"])
+    graph_ids = {edge[2] for edge in graph["edges"]}
+    assert all(f["id"] in graph_ids for f in access)
+    assert all("u" in f["properties"] and "v" in f["properties"] for f in access)
+
+    degree = {}
+    access_ids = {
+        f["id"] for f in features
+        if f["properties"].get("src") == "osm"
+        and f["properties"].get("fac") == 0
+    }
+    access_adj = {}
+    access_edge_by_id = {}
+    for u, v, *_ in graph["edges"]:
+        degree[u] = degree.get(u, 0) + 1
+        degree[v] = degree.get(v, 0) + 1
+    for edge in graph["edges"]:
+        u, v, edge_id, miles, _ = edge
+        if edge_id not in access_ids:
+            continue
+        access_edge_by_id[edge_id] = edge
+        access_adj.setdefault(u, []).append((v, edge_id))
+        access_adj.setdefault(v, []).append((u, edge_id))
+
+    seed = access_edge_by_id[access[0]["id"]]
+    seen_nodes = {seed[0], seed[1]}
+    seen_edges = set()
+    frontier = list(seen_nodes)
+    while frontier:
+        node = frontier.pop()
+        for neighbour, edge_id in access_adj.get(node, []):
+            seen_edges.add(edge_id)
+            if neighbour not in seen_nodes:
+                seen_nodes.add(neighbour)
+                frontier.append(neighbour)
+
+    corridor_miles = sum(access_edge_by_id[i][3] for i in seen_edges)
+    exits = [
+        node for node in seen_nodes
+        if degree.get(node, 0) > len(access_adj.get(node, []))
+    ]
+    assert corridor_miles >= 0.15
+    assert len(exits) >= 2, "the Baptist corridor must join the wider graph twice"
 
 
 def test_no_property_is_ever_null(features):

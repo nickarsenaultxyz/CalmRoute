@@ -356,11 +356,24 @@ fetch_attempts = 3
 # vertices still matches.
 dedupe_buffer_m = 15.0
 dedupe_max_overlap = 0.5
+access_dedupe_buffer_m = 8.0
+access_search_radius_m = 750
+
+# Service roads are motor-vehicle spaces with no trustworthy traffic count.
+# Keep them routable but do not advertise them as low-stress bike facilities.
+access_lts = 3
 
 # Refuse an import wildly outside what was measured, so a bad Overpass day or an
 # edit war cannot silently swing the "bike network" between builds.
 expect_min_miles = 10.0
 expect_max_miles = 40.0
+expect_min_access_miles = 0.3
+expect_max_access_miles = 2.0
+
+# This is the two-way Baptist Health cut-through that motivated importing
+# explicitly bicycle-authorized service roads. If it disappears upstream or is
+# accidentally filtered, keep the last good public map rather than regress.
+required_access_names = ["Baptist Health Entrance 1"]
 
 attribution = "Supplementary paths © OpenStreetMap contributors, ODbL"
 

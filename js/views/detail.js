@@ -55,7 +55,11 @@ export function render(props, { stats, aadtYear, council } = {}) {
       }), 'Not available')}
       ${fact('Length', miles(props.mi), '—')}
       ${props.src === 'osm'
-        ? fact('Path data', 'OpenStreetMap contributors (ODbL)', '—')
+        ? fact(
+          props.fac ? 'Path data' : 'Access-road data',
+          'OpenStreetMap contributors (ODbL)',
+          '—',
+        )
         : ''}
       ${props.isl != null
         ? fact('Low-stress island', `#${props.isl}`, '—')

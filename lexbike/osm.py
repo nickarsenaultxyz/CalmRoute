@@ -1,23 +1,22 @@
-"""Supplementary off-road paths from OpenStreetMap.
+"""Supplementary bicycle routing links from OpenStreetMap.
 
 The county-scoped OSM query currently carries 70.0 miles of
 ``highway=cycleway`` and ``bicycle=designated`` path. After removing paths
 already present in LFUCG, 21.0 miles remain -- including campus paths,
 apartment-complex connectors and park links that the city file does not contain.
 
-**Why this is importable when OSM streets are not.** Earlier work ruled out
-mixing OSM into the pipeline, on the grounds that it would introduce a second
-differently-noded network carrying none of the speed, volume or road-class
-attributes the classifier needs. That reasoning holds for on-road facilities and
-does not hold here: a path separated from traffic is LTS 1 *by definition*,
-which is already exactly how LFUCG paths are rated. Nothing has to be inferred,
-and nothing is conflated onto a centreline -- these are additional path
-geometries attached by the same connector logic.
+**Why this is importable when the general OSM street network is not.** A path
+separated from traffic is LTS 1 *by definition*, which is already how LFUCG
+paths are rated. The one reviewed service-road corridor is different: it is
+included only because OSM explicitly permits bicycles, given a conservative
+LTS 3 rating, and not counted as a bike facility. These geometries use the same
+attachment logic as LFUCG paths rather than creating a parallel street network.
 
 **What is deliberately excluded.** OSM also has 261 miles of paved
 ``path``/``footway`` with no bicycle tag. Almost all of it is sidewalk.
 Importing it would inflate the network with footways, which is the kind of false
-precision this project exists to avoid.
+precision this project exists to avoid. Generic, private, parking and one-way
+service roads are excluded too.
 
 **Licensing.** OpenStreetMap data is ODbL. Anything published from it must carry
 attribution, and a produced database mixing it in is likely subject to
@@ -45,11 +44,12 @@ from .params import Params
 
 log = logging.getLogger(__name__)
 
-CACHE = Path(".cache/osm_cycleways.json")
+CACHE = Path(".cache/osm_bike_network.json")
 
-#: Only ways a cyclist is actually invited onto. `highway=cycleway` and an
-#: explicit `bicycle=designated` are the two unambiguous cases; everything else
-#: (a paved footway, a desire line through a park) is left out.
+#: Only ways a cyclist is explicitly invited onto. In addition to dedicated
+#: paths, the service-road clause captures useful campus and hospital links such
+#: as Baptist Health Entrance 1. Local parsing applies the access, parking-aisle
+#: and one-way exclusions again before anything reaches the graph.
 QUERY = """
 [out:json][timeout:{timeout}];
 rel({relation_id});
@@ -57,7 +57,12 @@ map_to_area->.a;
 (
   way(area.a)["highway"="cycleway"];
   way(area.a)["highway"~"^(path|footway)$"]["bicycle"="designated"];
-);
+)->.paths;
+way(area.a)["highway"="service"]["bicycle"~"^(yes|designated|permissive)$"]
+  ["name"="{access_seed_name}"]->.access_seed;
+way(around.access_seed:{access_search_radius_m})["highway"="service"]
+  ["bicycle"~"^(yes|designated|permissive)$"]->.access_near;
+(.paths;.access_seed;.access_near;);
 out geom;
 """
 
@@ -84,6 +89,10 @@ def fetch(params: Params, *, use_cache: bool = True) -> gpd.GeoDataFrame | None:
     query = QUERY.format(
         timeout=int(params["osm.fetch_timeout_s"]),
         relation_id=int(params["osm.relation_id"]),
+        access_seed_name=_overpass_string(
+            str(params["osm.required_access_names"][0])
+        ),
+        access_search_radius_m=int(params["osm.access_search_radius_m"]),
     )
     log.info("osm paths: querying %s", endpoint)
     attempts = int(params["osm.fetch_attempts"])
@@ -141,18 +150,34 @@ def _parse(payload: dict, params: Params) -> gpd.GeoDataFrame | None:
         if len(coords) < 2:
             continue
         tags = el.get("tags", {})
+        role = _role(tags)
+        if role is None:
+            continue
         rows.append({
             "osm_id": el.get("id"),
             "name": tags.get("name") or tags.get("ref") or "",
-            "osm_kind": "cycleway" if tags.get("highway") == "cycleway"
-                        else "designated path",
+            "osm_role": role,
+            "osm_kind": (
+                "bicycle-access service road" if role == "access"
+                else "cycleway" if tags.get("highway") == "cycleway"
+                else "designated path"
+            ),
             "surface": tags.get("surface", ""),
+            "_nodes": tuple(el.get("nodes", [])),
             "geometry": LineString(coords),
         })
     if not rows:
         raise OsmError("OSM path query returned nothing usable")
 
+    keep_access = _seeded_access_indices(
+        rows, set(params.get("osm.required_access_names", []))
+    )
+    rows = [
+        row for i, row in enumerate(rows)
+        if row["osm_role"] == "path" or i in keep_access
+    ]
     gdf = gpd.GeoDataFrame(rows, geometry="geometry", crs=4326)
+    gdf = gdf.drop(columns="_nodes")
     log.info(
         "osm paths: %d ways, %.1f mi before de-duplication",
         len(gdf), io.to_working_crs(gdf, params).geometry.length.sum() / 1609.344,
@@ -160,13 +185,74 @@ def _parse(payload: dict, params: Params) -> gpd.GeoDataFrame | None:
     return gdf
 
 
-def dedupe(osm: gpd.GeoDataFrame, existing: gpd.GeoDataFrame,
-           params: Params) -> gpd.GeoDataFrame:
-    """Drop OSM ways that duplicate a path LFUCG already has.
+def _overpass_string(value: str) -> str:
+    """Escape a controlled string for an Overpass quoted literal."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
-    Roughly a quarter of OSM's cycleway mileage is the Legacy Trail, Town Branch
-    and friends, which are already in the city layer. Importing both would draw
-    every major trail twice and double-count it in every statistic.
+
+def _seeded_access_indices(rows: list[dict], seed_names: set[str]) -> set[int]:
+    """Keep complete access-road components containing a reviewed named seed.
+
+    The useful Baptist corridor contains one named entrance and several unnamed
+    continuation ways. Expanding by shared OSM node retains that whole corridor
+    without admitting 1,800 unrelated service roads elsewhere in the county.
+    """
+    access = [i for i, row in enumerate(rows) if row["osm_role"] == "access"]
+    by_node: dict[int, list[int]] = {}
+    for i in access:
+        for node in rows[i].get("_nodes", ()):
+            by_node.setdefault(int(node), []).append(i)
+
+    seen = {
+        i for i in access
+        if str(rows[i].get("name") or "").strip() in seed_names
+    }
+    frontier = list(seen)
+    while frontier:
+        i = frontier.pop()
+        for node in rows[i].get("_nodes", ()):
+            for neighbour in by_node.get(int(node), ()):
+                if neighbour not in seen:
+                    seen.add(neighbour)
+                    frontier.append(neighbour)
+    return seen
+
+
+def _role(tags: dict) -> str | None:
+    """Classify one OSM way, applying the conservative access-road policy.
+
+    A service road is usable only when bicycle access is explicit. Parking
+    aisles and private roads are never shortcuts. One-way service roads are
+    held back until the browser graph can represent direction; treating one as
+    undirected would create a route that is illegal in one direction.
+    """
+    highway = tags.get("highway")
+    bicycle = tags.get("bicycle")
+    if highway == "cycleway":
+        return "path"
+    if highway in {"path", "footway"} and bicycle == "designated":
+        return "path"
+    if highway != "service" or bicycle not in {"yes", "designated", "permissive"}:
+        return None
+    name = str(tags.get("name") or "").strip()
+    if "parking" in name.casefold():
+        return None
+    if tags.get("service") == "parking_aisle":
+        return None
+    if tags.get("access") in {"private", "no"}:
+        return None
+    if tags.get("oneway") in {"yes", "1", "-1"}:
+        return None
+    return "access"
+
+
+def dedupe(osm: gpd.GeoDataFrame, existing: gpd.GeoDataFrame,
+           params: Params, streets: gpd.GeoDataFrame | None = None) -> gpd.GeoDataFrame:
+    """Drop OSM ways that duplicate geometry LFUCG already has.
+
+    Paths are compared with LFUCG's off-road facilities. Access roads are
+    compared with LFUCG street centrelines, which prevents an explicitly tagged
+    OSM service road from being added twice when the city already carries it.
 
     A way is dropped when most of its length lies inside a buffer around the
     existing off-road network -- length-based rather than endpoint-based, so a
@@ -180,13 +266,25 @@ def dedupe(osm: gpd.GeoDataFrame, existing: gpd.GeoDataFrame,
     osm_m = io.to_working_crs(osm, params).reset_index(drop=True)
     have = io.to_working_crs(existing, params)
     off = have[~have["on_road"]] if "on_road" in have.columns else have
-    if off.empty:
-        return osm
+    path_corridor = (
+        unary_union(off.geometry.buffer(buffer_m).values)
+        if not off.empty else None
+    )
+    access_corridor = None
+    if streets is not None and len(streets):
+        access_buffer = float(params["osm.access_dedupe_buffer_m"])
+        access_corridor = unary_union(
+            io.to_working_crs(streets, params).geometry.buffer(access_buffer).values
+        )
 
-    corridor = unary_union(off.geometry.buffer(buffer_m).values)
     keep = []
     for i, geom in enumerate(osm_m.geometry):
         if geom.length <= 0:
+            continue
+        role = osm_m.iloc[i].get("osm_role", "path")
+        corridor = access_corridor if role == "access" else path_corridor
+        if corridor is None:
+            keep.append(i)
             continue
         share = geom.intersection(corridor).length / geom.length
         if share < max_overlap:
@@ -196,7 +294,7 @@ def dedupe(osm: gpd.GeoDataFrame, existing: gpd.GeoDataFrame,
     dropped_mi = (osm_m.geometry.length.sum()
                   - io.to_working_crs(out, params).geometry.length.sum()) / 1609.344
     log.info(
-        "osm paths: kept %d of %d ways (%.1f mi dropped as duplicating LFUCG)",
+        "osm supplement: kept %d of %d ways (%.1f mi dropped as duplicating LFUCG)",
         len(out), len(osm), dropped_mi,
     )
     return out
@@ -206,14 +304,15 @@ def as_facilities(osm: gpd.GeoDataFrame, params: Params) -> gpd.GeoDataFrame:
     """Shape OSM ways like rows of the LFUCG bike layer.
 
     Downstream code takes one facility frame, so rather than special-casing OSM
-    everywhere it is given the same columns: an off-road, existing, path-class
-    facility. ``source`` marks the provenance so the map can filter or label it
-    and no figure has to guess where a segment came from.
+    everywhere it is given the same columns. Dedicated paths retain the path
+    facility type. Bicycle-access service roads carry no bike-facility credit;
+    they receive their conservative rating later in ``assemble_edges``.
+    ``source`` marks provenance so the map can label and audit the result.
     """
     if osm is None or osm.empty:
         return osm
     out = osm.copy()
-    out["fac"] = "path"
+    out["fac"] = out["osm_role"].map({"path": "path", "access": "none"})
     out["on_road"] = False
     out["status"] = params["scenario.existing_status"]
     out["network_name"] = out["name"]
@@ -233,13 +332,31 @@ def quality_gate(kept: gpd.GeoDataFrame, params: Params) -> None:
     """
     if kept is None or kept.empty:
         raise OsmError("OSM import produced no usable paths")
-    miles = io.to_working_crs(kept, params).geometry.length.sum() / 1609.344
-    lo = float(params["osm.expect_min_miles"])
-    hi = float(params["osm.expect_max_miles"])
-    log.info("osm paths: %.1f mi net new", miles)
-    if not (lo <= miles <= hi):
+    frame = io.to_working_crs(kept, params)
+    miles = frame.geometry.length / 1609.344
+    for role, label, lo_key, hi_key in [
+        ("path", "paths", "osm.expect_min_miles", "osm.expect_max_miles"),
+        (
+            "access", "bike-access roads",
+            "osm.expect_min_access_miles", "osm.expect_max_access_miles",
+        ),
+    ]:
+        hit = kept["osm_role"] == role
+        value = float(miles[hit].sum())
+        lo = float(params[lo_key])
+        hi = float(params[hi_key])
+        log.info("osm %s: %.1f mi net new", label, value)
+        if not (lo <= value <= hi):
+            raise OsmError(
+                f"OSM {label} import is {value:.1f} mi, outside the expected "
+                f"{lo:.1f}-{hi:.1f} mi. Either OSM has changed materially or "
+                "the query is wrong; review before publishing."
+            )
+
+    names = set(kept.loc[kept["osm_role"] == "access", "name"])
+    missing = set(params.get("osm.required_access_names", [])) - names
+    if missing:
         raise OsmError(
-            f"OSM import is {miles:.1f} mi, outside the expected {lo:.0f}-{hi:.0f} mi. "
-            "Either OSM has changed materially or the query is wrong; review "
-            "before publishing."
+            "required bicycle-access road(s) missing after de-duplication: "
+            + ", ".join(sorted(missing))
         )

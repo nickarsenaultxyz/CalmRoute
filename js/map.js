@@ -78,7 +78,7 @@ export function createMap(manifest, initial = {}) {
       compact: true,
       customAttribution:
         '<a href="https://www.openstreetmap.org/copyright" '
-        + 'target="_blank" rel="noopener">Supplementary paths © '
+        + 'target="_blank" rel="noopener">Supplementary bike data © '
         + 'OpenStreetMap contributors (ODbL)</a>',
     },
   });
