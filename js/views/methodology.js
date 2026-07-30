@@ -38,10 +38,13 @@ export function render(methodology, stats) {
   const limits = (stats?.limitations || [])
     .map((l) => `<li>${escapeHtml(l)}</li>`).join('');
   const osmSource = stats?.osm_paths?.enabled
-    ? ` Supplementary off-road paths from
+    ? ` Supplementary off-road paths and explicitly bicycle-authorized access
+      roads from
       <a href="https://www.openstreetmap.org/copyright"
          target="_blank" rel="noopener">OpenStreetMap contributors</a>
-      under the ODbL.`
+      under the ODbL. Access roads are conservatively rated LTS
+      ${stats.osm_paths.access_roads?.rating ?? 3} and are not counted as bike
+      facilities.`
     : '';
 
   return `

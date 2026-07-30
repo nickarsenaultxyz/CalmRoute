@@ -319,6 +319,13 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
             conf_share[name] = round(100 * float(miles[sel].sum()) / low_miles, 1) if low_miles else 0.0
 
     largest = float(major["miles"].iloc[0]) if len(major) else 0.0
+    osm_source = (
+        edges["source"].fillna("").eq("osm")
+        if "source" in edges.columns
+        else pd.Series(False, index=edges.index)
+    )
+    osm_path = osm_source & edges["fac"].eq("path")
+    osm_access = osm_source & edges["fac"].eq("none")
 
     return {
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -349,7 +356,10 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
             "distinct_island_pairs": int(barriers["best_for_pair"].sum()) if len(barriers) else 0,
         },
         "data_sources": {
-            "street_centrelines": "LFUCG",
+            "street_centrelines": (
+                "LFUCG + OpenStreetMap bicycle-access service roads"
+                if params.get("osm.enabled", False) else "LFUCG"
+            ),
             "bike_facilities": (
                 "LFUCG + OpenStreetMap supplementary paths"
                 if params.get("osm.enabled", False) else "LFUCG"
@@ -362,6 +372,15 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
         "osm_paths": {
             "enabled": bool(params.get("osm.enabled", False)),
             "attribution": params.get("osm.attribution", ""),
+            "paths": {
+                "segments": int(osm_path.sum()),
+                "miles": round(float(miles[osm_path].sum()), 1),
+            },
+            "access_roads": {
+                "segments": int(osm_access.sum()),
+                "miles": round(float(miles[osm_access].sum()), 1),
+                "rating": int(params.get("osm.access_lts", 3)),
+            },
         },
         "coverage": {
             "sampled_areas": params.get("coverage.sampled_areas"),
