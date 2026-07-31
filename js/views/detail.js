@@ -56,7 +56,9 @@ export function render(props, { stats, aadtYear, council } = {}) {
       ${fact('Length', miles(props.mi), '—')}
       ${props.src === 'osm'
         ? fact(
-          props.fac ? 'Path data' : 'Access-road data',
+          props.osm_role === 'reviewed_street'
+            ? 'Reviewed-street data'
+            : props.fac ? 'Path data' : 'Access-road data',
           'OpenStreetMap contributors (ODbL)',
           '—',
         )

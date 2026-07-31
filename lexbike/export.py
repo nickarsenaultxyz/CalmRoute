@@ -180,6 +180,9 @@ def _feature(row, decimals: int) -> dict:
     # preserves auditable provenance without repeating a string on every road.
     if row.get("source") == "osm":
         props["src"] = "osm"
+        role = row.get("osm_role")
+        if role is not None and not pd.isna(role):
+            props["osm_role"] = str(role)
 
     return {
         "type": "Feature",
@@ -324,8 +327,14 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
         if "source" in edges.columns
         else pd.Series(False, index=edges.index)
     )
-    osm_path = osm_source & edges["fac"].eq("path")
-    osm_access = osm_source & edges["fac"].eq("none")
+    osm_role = (
+        edges["osm_role"].fillna("")
+        if "osm_role" in edges.columns
+        else pd.Series("", index=edges.index)
+    )
+    osm_path = osm_source & osm_role.eq("path")
+    osm_access = osm_source & osm_role.eq("access")
+    osm_reviewed_street = osm_source & osm_role.eq("reviewed_street")
 
     return {
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -357,7 +366,7 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
         },
         "data_sources": {
             "street_centrelines": (
-                "LFUCG + OpenStreetMap bicycle-access service roads"
+                "LFUCG + reviewed OpenStreetMap street exceptions"
                 if params.get("osm.enabled", False) else "LFUCG"
             ),
             "bike_facilities": (
@@ -380,6 +389,14 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
                 "segments": int(osm_access.sum()),
                 "miles": round(float(miles[osm_access].sum()), 1),
                 "rating": int(params.get("osm.access_lts", 2)),
+            },
+            "reviewed_streets": {
+                "segments": int(osm_reviewed_street.sum()),
+                "miles": round(float(miles[osm_reviewed_street].sum()), 1),
+                "rating": int(params.get("osm.reviewed_street_lts", 1)),
+                "required_names": params.get(
+                    "osm.required_reviewed_street_names", []
+                ),
             },
         },
         "coverage": {

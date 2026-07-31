@@ -130,7 +130,7 @@ centrelines canonical removes that entire class of problem.
 | `lex_street_data.geojson` | LFUCG | 13,775 street centrelines |
 | `Bicycle_Network_Master.geojson` | LFUCG | 542 bike facility segments |
 | `StaList_Fayette (1).csv` | KYTC | 546 traffic count stations |
-| Live Overpass query | OpenStreetMap | County-scoped cycleways, bicycle-designated paths and explicitly bike-authorized access roads |
+| Live Overpass query | OpenStreetMap | County-scoped cycleways, bicycle-designated paths and narrowly reviewed street exceptions |
 
 A scheduled GitHub Actions build downloads the current
 [LFUCG Bicycle Network Public View](https://www.arcgis.com/home/item.html?id=90961d8f5c854453abf4123d4a99e139)
@@ -147,9 +147,12 @@ bicycle permission. Parking aisles, private access and one-way service roads are
 excluded. Geometry already represented by LFUCG is removed by an overlap check;
 every remaining OSM segment is marked in the download and attributed on the
 map. The reviewed Baptist Health access corridor is rated LTS 2 and does not
-count as a bike facility. A failed, empty, or unexpectedly large OSM response
-also stops deployment instead of silently reverting the public map to
-LFUCG-only data.
+count as a bike facility. Commonwealth Drive, which is missing from LFUCG, is a
+separate locally reviewed exception rated LTS 1; its short University Court
+approach is included so the west end joins the existing graph. Neither is
+presented or counted as a bike facility. A failed, empty, or unexpectedly large
+OSM response also stops deployment instead of silently reverting the public map
+to LFUCG-only data.
 
 A note on the bike layer, because it is easy to misread: `Type_Facility` is the
 facility that physically exists. `AltType_Facility` is a *recommended upgrade*,

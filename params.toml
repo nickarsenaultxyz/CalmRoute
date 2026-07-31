@@ -168,7 +168,8 @@ not measurements."""
 #  LFUCG's centreline file does not contain every street. Measured against
 #  OpenStreetMap in three sampled areas (Kenwick, UK/south, north Lexington),
 #  22 of 375 named non-service streets were absent -- 3% to 8% by area.
-#  White Ave, Commonwealth Dr and Brooks St are examples.
+#  White Ave, Commonwealth Dr and Brooks St are examples. Commonwealth Dr is
+#  now a reviewed exception imported below; the general limitation remains.
 #
 #  This is disclosed rather than filled. Importing OSM geometry would supply
 #  the shape of a missing street but none of its posted speed or road class,
@@ -184,9 +185,9 @@ sampled_areas = 3
 osm_named_streets = 375
 missing_from_lfucg = 22
 note = """LFUCG's street file is missing about 6% of named streets (measured \
-against OpenStreetMap across three sampled areas). A missing street cannot be \
-rated or routed over, so a route may occasionally detour around one that \
-exists."""
+against OpenStreetMap across three sampled areas). Most missing streets cannot \
+be rated or routed over, so a route may occasionally detour around one that \
+exists; individually reviewed exceptions are disclosed with the OSM supplement."""
 
 
 # ---------------------------------------------------------------------------
@@ -366,12 +367,22 @@ access_search_radius_m = 750
 # bike facility.
 access_lts = 2
 
+# Commonwealth Drive is absent from LFUCG but has been locally reviewed as a
+# 25 mph residential corridor. Import its OSM geometry at LTS 1, plus only the
+# short University Court approach needed to join its west end to the existing
+# LFUCG graph. Neither street is advertised or counted as a bike facility.
+reviewed_street_lts = 1
+required_reviewed_street_names = ["Commonwealth Drive"]
+reviewed_street_connector_names = ["University Court"]
+
 # Refuse an import wildly outside what was measured, so a bad Overpass day or an
 # edit war cannot silently swing the "bike network" between builds.
 expect_min_miles = 10.0
 expect_max_miles = 40.0
 expect_min_access_miles = 0.3
 expect_max_access_miles = 2.0
+expect_min_reviewed_street_miles = 0.6
+expect_max_reviewed_street_miles = 1.0
 
 # This is the two-way Baptist Health cut-through that motivated importing
 # explicitly bicycle-authorized service roads. If it disappears upstream or is

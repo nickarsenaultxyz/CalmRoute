@@ -42,9 +42,11 @@ export function render(methodology, stats) {
       roads from
       <a href="https://www.openstreetmap.org/copyright"
          target="_blank" rel="noopener">OpenStreetMap contributors</a>
-      under the ODbL. The reviewed access corridor is rated LTS
-      ${stats.osm_paths.access_roads?.rating ?? 2} and are not counted as bike
-      facilities.`
+      under the ODbL. The reviewed Baptist access corridor is rated LTS
+      ${stats.osm_paths.access_roads?.rating ?? 2}. Commonwealth Drive is a
+      reviewed missing-street exception rated LTS
+      ${stats.osm_paths.reviewed_streets?.rating ?? 1}. Neither is counted as a
+      bike facility.`
     : '';
 
   return `
