@@ -17,12 +17,12 @@ import { debounce, onPopState, read, write } from './lib/urlstate.js';
 import { checkSupport, createMap, setBasemap } from './map.js?v=20260731-commonwealth-lts1';
 import { Panel } from './panel.js';
 import * as browse from './views/browse.js';
-import * as detail from './views/detail.js?v=20260731-commonwealth-lts1';
-import * as legend from './views/legend.js';
+import * as detail from './views/detail.js?v=20260731-routing-focus';
+import * as legend from './views/legend.js?v=20260731-routing-focus';
 import * as methodology from './views/methodology.js?v=20260731-commonwealth-lts1';
-import * as routeView from './views/route.js?v=20260731-route-geometry-loading';
+import * as routeView from './views/route.js?v=20260731-routing-focus';
 import * as settings from './views/settings.js';
-import * as share from './views/share.js';
+import * as share from './views/share.js?v=20260731-routing-focus';
 
 const els = {
   loading: document.getElementById('loading'),
@@ -78,7 +78,7 @@ function showLegend({ push = false } = {}) {
   app.state.selected = null;
   clearSelection();
   const body = app.panel.show({
-    title: 'Lexington Bike Stress',
+    title: 'Lexington Bike Routes',
     root: true,
     html: legend.render(app.stats, app.state),
   });
@@ -325,9 +325,10 @@ async function ensureGraph() {
       }
       const { buildGraph, components } = await import('./lib/graph.js');
       app.graph = buildGraph(raw);
-      // Island labels answer "is a comfortable route even possible" before a
-      // search runs, so the failure message can name both islands.
-      app.lowStressLabels = components(app.graph, 2);
+      // This internal connectivity check distinguishes a route that cannot
+      // satisfy the strict comfort setting from a pair that is absent from the
+      // routable graph altogether.
+      app.lowStressComponents = components(app.graph, 2);
       return app.graph;
     });
   }
@@ -385,13 +386,11 @@ async function recomputeRoute() {
     app.route.fallbackResult = fallback
       ? { ...fallback, detour: shortest ? fallback.miles / shortest.miles : null }
       : null;
-    const sameIsland = app.lowStressLabels
-      && app.lowStressLabels[snapA.u] === app.lowStressLabels[snapB.u];
-    app.route.result = (fallback || !sameIsland)
+    const connectedAtLowStress = app.lowStressComponents
+      && app.lowStressComponents[snapA.u] === app.lowStressComponents[snapB.u];
+    app.route.result = (fallback || !connectedAtLowStress)
       ? {
           kind: 'blocked',
-          islandA: islandOf(snapA.u),
-          islandB: islandOf(snapB.u),
           fallback: app.route.fallbackResult,
         }
       : { kind: 'none' };
@@ -509,17 +508,6 @@ function routeBetweenSnaps(g, dj, snapA, snapB, mode) {
     worstLts: Math.max(r.worstLts, ltsA, ltsB),
     partial: { startNode: a.node, endNode: b.node },
   };
-}
-
-/** Island number for a graph node, read off the segments it belongs to. */
-function islandOf(node) {
-  const g = app.graph;
-  if (!g) return null;
-  for (let k = g.head[node]; k < g.head[node + 1]; k++) {
-    const f = app.featuresById.get(g.eId[g.via[k]]);
-    if (f && f.properties.isl != null) return f.properties.isl;
-  }
-  return null;
 }
 
 /**

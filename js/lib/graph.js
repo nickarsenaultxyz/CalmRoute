@@ -108,9 +108,8 @@ export function nearestNode(g, lng, lat, maxRings = 6) {
 /**
  * Connected components under a stress ceiling, via union-find.
  *
- * Used to answer "is a comfortable route even possible" *before* running a
- * search, so the honest failure message can name both islands instead of the
- * UI just spinning and giving up.
+ * Used to distinguish a route blocked by the selected comfort ceiling from
+ * points that are not connected in the routable graph.
  */
 export function components(g, maxLts) {
   const parent = new Int32Array(g.n);

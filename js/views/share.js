@@ -26,9 +26,8 @@ export function claim(stats, { segment } = {}) {
   if (!stats) return 'How comfortable is each Lexington street to ride a bike on?';
   const low = stats.low_stress;
   return `Lexington has ${low.miles.toLocaleString('en-US')} miles of streets `
-    + `comfortable for an ordinary adult to bike on — but they are split into `
-    + `${low.islands.toLocaleString('en-US')} disconnected islands, and the largest `
-    + `holds only ${low.largest_island_share_pct}% of them.`;
+    + 'comfortable for an ordinary adult to bike on. This map helps plan a '
+    + 'practical route while avoiding stressful streets where possible.';
 }
 
 /** The seat representing the selected street, if we know it. */
@@ -107,7 +106,7 @@ export function mount(root, { stats, segment, council, announce } = {}) {
     // fall through to the clipboard rather than failing silently.
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'Lexington Bike Stress Map', text, url });
+        await navigator.share({ title: 'Lexington Bike Route Planner', text, url });
         return;
       } catch (err) {
         if (err?.name === 'AbortError') return;   // user dismissed the sheet

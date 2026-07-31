@@ -1,15 +1,10 @@
 /**
  * Route planning.
  *
- * TODO(phase-5): the blocked-route verdict should offer "see what would fix
- * this", linking to the ranked gap crossings. The data is already published in
- * gaps.json; the view is not built, and a button that silently lands on the
- * overview is worse than no button.
- *
  * The interesting screen here is the failure one. Most routers, asked for a
  * comfortable route that does not exist, quietly hand back a compromised one
  * and let the rider discover the arterial themselves. This says so, names the
- * two islands, and offers the best available compromise as a separate,
+ * limitation, and offers the best available compromise as a separate,
  * explicitly-labelled choice.
  *
  * The same principle governs the ordinary screen. The default route trades some
@@ -121,15 +116,12 @@ function result(state) {
   }
 
   if (r.kind === 'blocked') {
-    // The screen this whole feature exists for.
-    const a = r.islandA;
-    const b = r.islandB;
     return `
       <div class="verdict bad">
-        <b>There's no comfortable route between these two places.</b>
-        <span>Your start and destination sit on different low-stress islands${
-          a != null && b != null ? ` (#${a} and #${b})` : ''}. The quiet streets
-          are there; they just don't join up.</span>
+        <b>No route at this comfort setting</b>
+        <span>The lower-stress streets between these points do not connect
+          continuously. You can review the best available route below, with
+          stressful portions clearly marked.</span>
       </div>
       ${r.fallback ? `
         <p class="tech">The best available route is

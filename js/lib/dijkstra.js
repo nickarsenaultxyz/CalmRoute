@@ -88,8 +88,8 @@ class Heap {
  * One-to-one search.
  *
  * Returns `null` when the target is unreachable under this mode, which is a
- * real answer rather than an error: for `only` it means the two points are on
- * different low-stress islands.
+ * real answer rather than an error: for `only` it means the selected comfort
+ * ceiling does not provide a continuous route between the two points.
  */
 export function route(g, source, target, mode = DEFAULT_MODE) {
   if (source < 0 || target < 0) return null;

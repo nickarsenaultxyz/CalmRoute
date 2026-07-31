@@ -47,7 +47,7 @@ def features():
 
 def test_manifest_lists_every_file_the_app_fetches(manifest):
     for key in ("network", "context", "residential", "stats", "methodology",
-                "graph", "islands", "gaps", "planned"):
+                "graph", "planned", "council"):
         assert key in manifest["files"], f"js/data.js fetches manifest.files.{key}"
         assert (DATA / manifest["files"][key]).exists()
 
@@ -90,7 +90,7 @@ def test_router_waits_for_every_geometry_layer_before_drawing():
 def test_stats_paths_the_legend_reads(manifest):
     s = load(manifest["files"]["stats"])
     assert all("lts" in r and "miles" in r for r in s["by_lts"])
-    for key in ("miles", "islands", "largest_island_share_pct"):
+    for key in ("miles",):
         assert s["low_stress"][key] is not None
     assert s["ridable_lts3"]["miles"] is not None
     # detail.js dates the traffic figure from this; an undated count would
@@ -114,7 +114,7 @@ def test_feature_ids_are_unique_across_both_layers(features):
 
 def test_properties_the_ui_reads_are_present(features):
     present = {k for f in features for k in f["properties"]}
-    for key in ("lts", "fac", "kind", "nm", "sp", "ad", "mi", "cf", "basis", "isl"):
+    for key in ("lts", "fac", "kind", "nm", "sp", "ad", "mi", "cf", "basis"):
         assert key in present, f"the UI reads properties.{key}"
 
 

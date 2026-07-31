@@ -9,14 +9,14 @@
   achieved was preventing people from zooming the interface.
 -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Lexington Bike Stress Map — how comfortable is each street to ride?</title>
-<meta name="description" content="A street-by-street comfort rating for cycling in Lexington, Kentucky. About 1,248 miles are ridable for a confident rider, but the 947 miles comfortable for an ordinary adult are split into 936 disconnected islands.">
+<title>Lexington Bike Route Planner — find a safer way to ride</title>
+<meta name="description" content="Plan a bike route across Lexington, Kentucky that balances lower-stress streets with a practical trip. See the comfort rating of every route segment.">
 <meta name="theme-color" content="#f7f7f5">
 <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
 
 <meta property="og:type" content="website">
-<meta property="og:title" content="Lexington Bike Stress Map">
-<meta property="og:description" content="947 miles of Lexington are comfortable to bike on. They are split into 936 disconnected islands, and the largest holds 19%.">
+<meta property="og:title" content="Lexington Bike Route Planner">
+<meta property="og:description" content="Plan a practical bike route across Lexington while avoiding stressful streets where possible.">
 <meta name="twitter:card" content="summary_large_image">
 
 <link rel="stylesheet" href="./assets/vendor/maplibre-gl-5.24.0.css">
@@ -38,7 +38,7 @@
   <button id="sheet-handle" class="sheet-handle" aria-label="Resize panel"></button>
   <header class="panel-head">
     <button id="panel-back" class="icon-btn" hidden aria-label="Back">←</button>
-    <h1 id="panel-title">Lexington Bike Stress</h1>
+    <h1 id="panel-title">Lexington Bike Routes</h1>
   </header>
   <div id="panel-body" class="panel-body" tabindex="-1"></div>
 </aside>
@@ -48,7 +48,7 @@
 
 <noscript>
   <div class="fallback">
-    <h1>Lexington Bike Stress Map</h1>
+    <h1>Lexington Bike Route Planner</h1>
     <p>This map needs JavaScript to draw itself. The underlying data is open and
        can be downloaded directly:</p>
     <ul>
@@ -105,6 +105,6 @@
 })();
 </script>
 
-<script type="module" src="./js/main.js?v=20260731-route-geometry-loading"></script>
+<script type="module" src="./js/main.js?v=20260731-routing-focus"></script>
 </body>
 </html>

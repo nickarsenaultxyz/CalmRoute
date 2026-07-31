@@ -63,15 +63,13 @@ export function render(props, { stats, aadtYear, council } = {}) {
           '—',
         )
         : ''}
-      ${props.isl != null
-        ? fact('Low-stress island', `#${props.isl}`, '—')
-        : ''}
       ${councilRow(props, council)}
     </table>
 
     <p class="note">${escapeHtml(basis)}</p>
 
     <nav class="panel-nav" aria-label="Actions for this street">
+      <button class="btn primary" data-nav="route">Plan a route</button>
       <button class="btn" data-nav="share">Share, or contact your council member</button>
     </nav>
 
