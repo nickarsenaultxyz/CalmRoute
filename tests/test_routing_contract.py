@@ -25,6 +25,15 @@ def graph():
     return json.loads((DATA / "graph.json").read_text())
 
 
+@pytest.fixture(scope="module")
+def features_by_id():
+    out = {}
+    for name in ("network.geojson", "context.geojson", "residential.geojson"):
+        for feature in json.loads((DATA / name).read_text())["features"]:
+            out[feature["id"]] = feature
+    return out
+
+
 def test_edge_field_order_matches_the_client(graph):
     """js/lib/graph.js destructures [u, v, id, mi, lts] positionally."""
     assert graph["edge_fields"] == ["u", "v", "id", "miles", "lts"]
@@ -64,6 +73,25 @@ def test_edge_ids_resolve_to_drawable_features(graph):
 
     missing = [e[2] for e in graph["edges"] if e[2] not in ids]
     assert not missing, f"{len(missing)} routable edges have no drawable geometry"
+
+
+def test_every_drawn_edge_lands_exactly_on_its_graph_nodes(graph, features_by_id):
+    """Every transition in a browser route must be spatially continuous.
+
+    Sharing a graph node is not enough if the corresponding drawn lines end at
+    different coordinates: the search would succeed while the route appears to
+    jump across a gap. Audit every published edge against the node coordinates
+    the router actually uses.
+    """
+    bad = []
+    for u, v, edge_id, *_ in graph["edges"]:
+        coords = features_by_id[edge_id]["geometry"]["coordinates"]
+        drawn = {tuple(coords[0]), tuple(coords[-1])}
+        expected = {tuple(graph["nodes"][u]), tuple(graph["nodes"][v])}
+        if drawn != expected:
+            bad.append(edge_id)
+
+    assert not bad, f"{len(bad)} route edges do not line up with their graph nodes"
 
 
 def test_trails_can_be_joined_partway_along(graph):

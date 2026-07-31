@@ -10,6 +10,7 @@ suite.
 
 from __future__ import annotations
 
+import heapq
 import json
 from pathlib import Path
 
@@ -167,6 +168,45 @@ def test_baptist_health_cut_through_is_routable(manifest, features):
     ]
     assert corridor_miles >= 0.15
     assert len(exits) >= 2, "the Baptist corridor must join the wider graph twice"
+
+    # The west/south end is physically about 9 m from Hiltonia Park. This was
+    # once discarded by a 120 m attachment-thinning window, making the browser
+    # route all the way around the hospital despite a visible short connection.
+    hiltonia_nodes = {
+        node
+        for f in features
+        if f["properties"].get("nm") == "Hiltonia Park"
+        for node in (f["properties"].get("u"), f["properties"].get("v"))
+        if node is not None
+    }
+    all_access_nodes = set(access_adj)
+    adjacency = {}
+    for u, v, _edge_id, miles, _lts in graph["edges"]:
+        adjacency.setdefault(u, []).append((v, miles))
+        adjacency.setdefault(v, []).append((u, miles))
+
+    distance = {node: 0.0 for node in all_access_nodes}
+    heap = [(0.0, node) for node in all_access_nodes]
+    heapq.heapify(heap)
+    nearest = None
+    while heap:
+        miles, node = heapq.heappop(heap)
+        if miles != distance[node]:
+            continue
+        if node in hiltonia_nodes:
+            nearest = miles
+            break
+        for neighbour, edge_miles in adjacency.get(node, []):
+            candidate = miles + edge_miles
+            if candidate < distance.get(neighbour, float("inf")):
+                distance[neighbour] = candidate
+                heapq.heappush(heap, (candidate, neighbour))
+
+    assert nearest is not None
+    assert nearest * 1609.344 <= 15, (
+        f"Baptist access is {nearest * 1609.344:.1f} m by graph from "
+        "Hiltonia Park despite a roughly 9 m physical gap"
+    )
 
 
 def test_no_property_is_ever_null(features):
