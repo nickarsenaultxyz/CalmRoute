@@ -20,7 +20,7 @@ import * as browse from './views/browse.js';
 import * as detail from './views/detail.js?v=20260731-commonwealth-lts1';
 import * as legend from './views/legend.js';
 import * as methodology from './views/methodology.js?v=20260731-commonwealth-lts1';
-import * as routeView from './views/route.js';
+import * as routeView from './views/route.js?v=20260731-route-geometry-loading';
 import * as settings from './views/settings.js';
 import * as share from './views/share.js';
 
@@ -41,6 +41,7 @@ const app = window.__lexbike = {
   selected: null,
   hovered: null,
   graph: null,
+  contextPromise: null,
   route: {
     from: null, to: null, level: DEFAULT_ROUTE_LEVEL,
     picking: 'from', result: null,
@@ -225,7 +226,9 @@ function showRoute({ push = true } = {}) {
       // Draw the compromised route the rider explicitly asked to see.
       if (app.route.fallbackResult) {
         app.route.result = { kind: 'ok', ...app.route.fallbackResult };
-        drawRoute(app.route.fallbackResult);
+        if (!drawRoute(app.route.fallbackResult)) {
+          app.route.result = { kind: 'error' };
+        }
         showRoute({ push: false });
       }
     },
@@ -279,6 +282,31 @@ const detailRatingWord = (lts) =>
 
 /* ---------------------------------------------------------------- routing */
 
+/** Load busy-road geometry once and register it for route drawing.
+ *
+ * The graph can search before MapLibre has finished fetching this layer, but a
+ * route is not drawable until the corresponding feature geometries are also in
+ * `featuresById`. Keeping one shared promise lets initial map loading and the
+ * router wait on the same work instead of racing each other.
+ */
+function ensureContext() {
+  if (app.contextPromise) return app.contextPromise;
+  setLoading('Adding busy roads…');
+  app.contextPromise = loadContext(app.manifest)
+    .then((fc) => {
+      app.map.getSource('context')?.setData(fc);
+      for (const f of fc.features) app.featuresById.set(f.id, f);
+      setLoading(null);
+      return fc;
+    })
+    .catch((err) => {
+      console.error('context layer failed', err);
+      setLoading(null);
+      throw err;
+    });
+  return app.contextPromise;
+}
+
 /** Load the graph and build the CSR structure once, on first use. */
 async function ensureGraph() {
   if (app.graph) return app.graph;
@@ -289,8 +317,12 @@ async function ensureGraph() {
     // geometry and the line renders as disconnected fragments.
     app.graphPromise = Promise.all([
       loadGraph(app.manifest),
+      ensureContext(),
       app.residential ? app.residential.ensure() : null,
-    ]).then(async ([raw]) => {
+    ]).then(async ([raw, context, residential]) => {
+      if (!context || !residential) {
+        throw new Error('A map geometry layer required for routing did not load.');
+      }
       const { buildGraph, components } = await import('./lib/graph.js');
       app.graph = buildGraph(raw);
       // Island labels answer "is a comfortable route even possible" before a
@@ -314,7 +346,16 @@ async function recomputeRoute() {
   app.route.result = { kind: 'pending' };
   showRoute({ push: false });
 
-  const g = await ensureGraph();
+  let g;
+  try {
+    g = await ensureGraph();
+  } catch (err) {
+    console.error('route geometry unavailable', err);
+    app.route.result = { kind: 'error' };
+    drawRoute(null);
+    showRoute({ push: false });
+    return;
+  }
   const { snapToNetwork } = await import('./lib/graph.js');
   const dj = await import('./lib/dijkstra.js');
 
@@ -366,7 +407,11 @@ async function recomputeRoute() {
     detour: shortest ? primary.miles / shortest.miles : null,
     quieter: quieterThan(g, dj, snapA, snapB, primary, level),
   };
-  drawRoute(primary);
+  if (!drawRoute(primary)) {
+    app.route.result = { kind: 'error' };
+    showRoute({ push: false });
+    return;
+  }
   showRoute({ push: false });
   announce(primary.stressMiles > 0.01
     ? `Route found: ${primary.miles.toFixed(1)} miles, including ${
@@ -489,7 +534,7 @@ function drawRoute(result) {
   if (!result) {
     setRoute(app.map, null);
     setRouteAccess(app.map, null);
-    return;
+    return true;
   }
   const features = [];
   const push = (coords, lts) => {
@@ -518,9 +563,17 @@ function drawRoute(result) {
       push(clipToEnd(snapA, partial.startNode === snapA.v),
            app.graph.eLts[snapA.edge]);
     }
+    const missingIds = [];
     for (const id of result.featureIds) {
       const f = app.featuresById.get(id);
       if (f) push(f.geometry.coordinates, f.properties.lts);
+      else missingIds.push(id);
+    }
+    if (missingIds.length) {
+      console.error('route feature geometry missing', missingIds);
+      setRoute(app.map, null);
+      setRouteAccess(app.map, null);
+      return false;
     }
     if (snapB) {
       push(clipToEnd(snapB, partial.endNode === snapB.v),
@@ -541,6 +594,7 @@ function drawRoute(result) {
     });
   }
   setRouteAccess(app.map, { type: 'FeatureCollection', features: stubs });
+  return true;
 }
 
 function setRoutePoint(which, lngLat) {
@@ -722,14 +776,9 @@ async function boot() {
     // Busy roads next. Not deferred to idle like the residential bulk: without
     // them the map reads as a handful of disconnected trails floating in space,
     // which overstates how good the network is.
-    setLoading('Adding busy roads…');
-    loadContext(manifest)
-      .then((fc) => {
-        map.getSource('context').setData(fc);
-        for (const f of fc.features) app.featuresById.set(f.id, f);
-        setLoading(null);
-      })
-      .catch((err) => { console.error('context layer failed', err); setLoading(null); });
+    // Start this eagerly, but keep the promise so routing can wait for the
+    // geometry instead of drawing a graph result with context-road gaps.
+    ensureContext().catch(() => {});
 
     // Off by default, so this is not prefetched -- it is fetched the first time
     // the layer is switched on (or immediately if a deep link arrived with it

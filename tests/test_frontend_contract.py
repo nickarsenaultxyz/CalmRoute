@@ -62,6 +62,27 @@ def test_manifest_has_an_initial_view(manifest):
     )
 
 
+def test_router_waits_for_every_geometry_layer_before_drawing():
+    """A graph result is not drawable until all three feature files are loaded.
+
+    The context layer used to load in the background while routing waited only
+    for graph.json and residential.geojson. A quick route could therefore
+    contain valid busy-road IDs whose geometry was not yet in featuresById;
+    drawRoute silently skipped them and painted disconnected fragments.
+    """
+    source = Path("js/main.js").read_text()
+    ensure_graph = source.split(
+        "async function ensureGraph()", 1
+    )[1].split(
+        "async function recomputeRoute()", 1
+    )[0]
+    assert "loadGraph(app.manifest)" in ensure_graph
+    assert "ensureContext()" in ensure_graph
+    assert "app.residential.ensure()" in ensure_graph
+    assert "missingIds.length" in source
+    assert "route feature geometry missing" in source
+
+
 # --------------------------------------------------------------------------
 #  stats — js/views/legend.js reads these exact paths
 # --------------------------------------------------------------------------

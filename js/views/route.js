@@ -112,6 +112,14 @@ function result(state) {
       </div>`;
   }
 
+  if (r.kind === 'error') {
+    return `<div class="verdict bad">
+        <b>The route could not be drawn</b>
+        <span>One of the map layers did not finish loading. Reload the page and
+          try again.</span>
+      </div>`;
+  }
+
   if (r.kind === 'blocked') {
     // The screen this whole feature exists for.
     const a = r.islandA;
