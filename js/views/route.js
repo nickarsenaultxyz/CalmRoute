@@ -22,28 +22,61 @@ export function render(state, stats) {
   const row = (which) => {
     const p = state[which];
     const set = !!p;
+    const search = state.locationSearch?.[which] || {};
+    const query = search.query ?? p?.name ?? '';
+    const pending = search.status === 'pending';
+    const matches = (search.results || []).map((location, index) => `
+      <button type="button" class="location-result"
+              data-location-result data-which="${which}" data-index="${index}">
+        ${escapeHtml(location.name)}
+      </button>`).join('');
     return `
-      <button class="point-row${set ? ' set' : ''}" data-point="${which}"
-              aria-pressed="${state.picking === which}">
-        <span class="pin ${which}" aria-hidden="true"></span>
-        <span class="label">
-          <b>${POINT_LABEL[which]}</b>
-          <span>${set ? escapeHtml(p.name || 'Dropped pin')
-                      : (state.picking === which ? 'Tap the map…' : 'Not set')}</span>
-        </span>
-        ${set ? '<span class="clear" data-clear="' + which + '">Clear</span>' : ''}
-      </button>`;
+      <section class="location-group${set ? ' set' : ''}"
+               aria-labelledby="location-label-${which}">
+        <form class="location-row" data-location-form="${which}">
+          <span class="pin ${which}" aria-hidden="true"></span>
+          <label class="location-field" for="location-${which}">
+            <b id="location-label-${which}">${POINT_LABEL[which]}</b>
+            <input id="location-${which}" type="search" autocomplete="street-address"
+                   enterkeyhint="search" data-location-input="${which}"
+                   value="${escapeHtml(query)}"
+                   placeholder="Address or place in Lexington">
+          </label>
+          <button class="btn location-submit" type="submit"${pending ? ' disabled' : ''}>
+            ${pending ? 'Searching…' : 'Search'}
+          </button>
+        </form>
+        <div class="location-actions">
+          <button type="button" class="linklike" data-point="${which}"
+                  aria-pressed="${state.picking === which}">
+            ${state.picking === which ? 'Tap the map…' : 'Pick on map'}
+          </button>
+          ${set ? `<button type="button" class="linklike" data-clear="${which}">Clear</button>` : ''}
+          ${set ? `<span>${escapeHtml(p.name || 'Map pin selected')}</span>` : ''}
+        </div>
+        ${search.message ? `<p class="location-status ${search.status === 'error' ? 'error' : ''}"
+             role="status">${escapeHtml(search.message)}</p>` : ''}
+        ${matches ? `<div class="location-results"
+          aria-label="${POINT_LABEL[which]} location matches">${matches}</div>` : ''}
+      </section>`;
   };
 
   return `
-    <p class="tech">Pick two points on the map. The route balances comfort
-      against distance — it will go a bit further to avoid a busy road, but not
-      three times as far.</p>
+    <p class="tech">Search for two locations, or pick them on the map. The route
+      balances comfort against distance — it will go a bit further to avoid a
+      busy road, but not three times as far.</p>
 
     <div class="points">
       ${row('from')}
       ${row('to')}
     </div>
+    <p class="tech geocoder-note">Address searches are sent to
+      <a href="https://www.openstreetmap.org/" target="_blank" rel="noopener">OpenStreetMap</a>
+      only when you press Search. Search powered by
+      <a href="https://nominatim.openstreetmap.org/" target="_blank"
+         rel="noopener">Nominatim</a> under its
+      <a href="https://operations.osmfoundation.org/policies/nominatim/"
+         target="_blank" rel="noopener">usage policy</a>.</p>
 
     <div class="share-actions">
       <button class="btn" data-route="swap"${state.from && state.to ? '' : ' disabled'}>Swap</button>
@@ -214,6 +247,7 @@ const selectorFor = (el) => {
   if (!d) return null;
   if (d.route) return `[data-route="${d.route}"]`;
   if (d.point) return `[data-point="${d.point}"]`;
+  if (d.locationInput) return `[data-location-input="${d.locationInput}"]`;
   return null;
 };
 
@@ -221,13 +255,38 @@ export function mount(root, handlers, state) {
   const remember = () => { refocus = selectorFor(document.activeElement); };
 
   root.querySelectorAll('[data-point]').forEach((btn) => {
-    btn.addEventListener('click', (ev) => {
+    btn.addEventListener('click', () => {
       remember();
-      if (ev.target.dataset.clear) {
-        handlers.onClear(ev.target.dataset.clear);
-        return;
-      }
       handlers.onPick(btn.dataset.point);
+    });
+  });
+
+  root.querySelectorAll('[data-clear]').forEach((btn) => {
+    btn.addEventListener('click', () => handlers.onClear(btn.dataset.clear));
+  });
+
+  root.querySelectorAll('[data-location-input]').forEach((input) => {
+    input.addEventListener('input', () => {
+      handlers.onQuery?.(input.dataset.locationInput, input.value);
+    });
+  });
+
+  root.querySelectorAll('[data-location-form]').forEach((form) => {
+    form.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      remember();
+      const which = form.dataset.locationForm;
+      const input = form.querySelector(`[data-location-input="${which}"]`);
+      handlers.onSearch?.(which, input?.value || '');
+    });
+  });
+
+  root.querySelectorAll('[data-location-result]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const which = btn.dataset.which;
+      refocus = `[data-location-input="${which}"]`;
+      const location = state.locationSearch?.[which]?.results?.[Number(btn.dataset.index)];
+      if (location) handlers.onChooseLocation?.(which, location);
     });
   });
 
@@ -257,7 +316,9 @@ export function mount(root, handlers, state) {
 
   // Wait for the settled render: restoring focus on the "Working…" pass would
   // consume the selector one render too early and lose it again straight after.
-  if (refocus && state?.result?.kind !== 'pending') {
+  const locationPending = Object.values(state?.locationSearch || {})
+    .some((search) => search.status === 'pending');
+  if (refocus && state?.result?.kind !== 'pending' && !locationPending) {
     const target = root.querySelector(refocus);
     refocus = null;
     target?.focus();

@@ -20,7 +20,7 @@ import * as browse from './views/browse.js';
 import * as detail from './views/detail.js?v=20260731-routing-focus';
 import * as legend from './views/legend.js?v=20260731-routing-focus';
 import * as methodology from './views/methodology.js?v=20260731-commonwealth-lts1';
-import * as routeView from './views/route.js?v=20260731-routing-focus';
+import * as routeView from './views/route.js?v=20260731-location-search';
 import * as settings from './views/settings.js';
 import * as share from './views/share.js?v=20260731-routing-focus';
 
@@ -45,6 +45,10 @@ const app = window.__lexbike = {
   route: {
     from: null, to: null, level: DEFAULT_ROUTE_LEVEL,
     picking: 'from', result: null,
+    locationSearch: {
+      from: { query: '', status: 'idle', results: [], message: '' },
+      to: { query: '', status: 'idle', results: [], message: '' },
+    },
   },
 };
 
@@ -195,11 +199,28 @@ function showRoute({ push = true } = {}) {
         : 'Cancelled.');
       showRoute({ push: false });
     },
-    onClear: (which) => { app.route[which] = null; recomputeRoute(); },
+    onQuery: (which, query) => {
+      app.route.locationSearch[which].query = query;
+    },
+    onSearch: searchRouteLocation,
+    onChooseLocation: chooseRouteLocation,
+    onClear: (which) => {
+      app.route[which] = null;
+      app.route.locationSearch[which] = {
+        query: '', status: 'idle', results: [], message: '',
+      };
+      updateRouteEndpoints();
+      recomputeRoute();
+    },
     onClearBoth: () => {
       app.route.from = app.route.to = null;
       app.route.result = null;
       app.route.picking = 'from';
+      app.route.locationSearch = {
+        from: { query: '', status: 'idle', results: [], message: '' },
+        to: { query: '', status: 'idle', results: [], message: '' },
+      };
+      updateRouteEndpoints();
       drawRoute(null);
       showRoute({ push: false });
     },
@@ -207,6 +228,10 @@ function showRoute({ push = true } = {}) {
       const t = app.route.from;
       app.route.from = app.route.to;
       app.route.to = t;
+      const search = app.route.locationSearch.from;
+      app.route.locationSearch.from = app.route.locationSearch.to;
+      app.route.locationSearch.to = search;
+      updateRouteEndpoints();
       recomputeRoute();
     },
     onLevel: (level) => {
@@ -586,13 +611,92 @@ function drawRoute(result) {
 }
 
 function setRoutePoint(which, lngLat) {
-  app.route[which] = { lng: lngLat.lng, lat: lngLat.lat };
+  app.route[which] = {
+    lng: Number(lngLat.lng),
+    lat: Number(lngLat.lat),
+    ...(lngLat.name ? { name: lngLat.name } : {}),
+  };
   app.route.picking = which === 'from' && !app.route.to ? 'to' : null;
+  updateRouteEndpoints();
+  recomputeRoute();
+}
+
+function updateRouteEndpoints() {
   setRouteEndpoints(app.map, [
     app.route.from && { ...app.route.from, role: 'from' },
     app.route.to && { ...app.route.to, role: 'to' },
   ]);
-  recomputeRoute();
+}
+
+/**
+ * Search only on explicit form submission.
+ *
+ * Nominatim's public service prohibits client-side autocomplete. The helper
+ * also serialises requests to one per second, caches repeats, and bounds every
+ * query to the map's Lexington extent.
+ */
+async function searchRouteLocation(which, query) {
+  const search = app.route.locationSearch[which];
+  const value = String(query || '').trim();
+  search.query = value;
+  search.results = [];
+  search.message = '';
+
+  if (value.length < 3) {
+    search.status = 'error';
+    search.message = 'Type at least three characters.';
+    showRoute({ push: false });
+    announce(search.message);
+    return;
+  }
+
+  const request = (search.request || 0) + 1;
+  search.request = request;
+  search.status = 'pending';
+  app.route.picking = null;
+  showRoute({ push: false });
+
+  try {
+    const { searchLocations } = await import(
+      './lib/geocode.js?v=20260731-location-search'
+    );
+    const results = await searchLocations(value, app.manifest.bbox);
+    if (search.request !== request) return;
+
+    if (results.length === 1) {
+      chooseRouteLocation(which, results[0]);
+      return;
+    }
+
+    search.results = results;
+    search.status = results.length ? 'results' : 'error';
+    search.message = results.length
+      ? 'Choose the matching location.'
+      : 'No matching location was found in Lexington. Try a street address or place name.';
+    showRoute({ push: false });
+    announce(search.message);
+  } catch (err) {
+    if (search.request !== request) return;
+    console.error('location search failed', err);
+    search.status = 'error';
+    search.message = 'Location search is unavailable right now. You can still pick the point on the map.';
+    showRoute({ push: false });
+    announce(search.message);
+  }
+}
+
+function chooseRouteLocation(which, location) {
+  const search = app.route.locationSearch[which];
+  search.query = location.name;
+  search.status = 'idle';
+  search.results = [];
+  search.message = '';
+  easeTo(app.map, {
+    center: [location.lng, location.lat],
+    zoom: Math.max(app.map.getZoom(), 15),
+  });
+  announce(`${which === 'from' ? 'Start' : 'Destination'} set to ${location.name}.`);
+  setRoutePoint(which, location);
 }
 
 /* -------------------------------------------------------------- selection */

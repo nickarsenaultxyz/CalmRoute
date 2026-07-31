@@ -12,6 +12,7 @@
 <title>Lexington Bike Route Planner — find a safer way to ride</title>
 <meta name="description" content="Plan a bike route across Lexington, Kentucky that balances lower-stress streets with a practical trip. See the comfort rating of every route segment.">
 <meta name="theme-color" content="#f7f7f5">
+<meta name="lexbike-geocoder" content="https://nominatim.openstreetmap.org/search">
 <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
 
 <meta property="og:type" content="website">
@@ -20,7 +21,7 @@
 <meta name="twitter:card" content="summary_large_image">
 
 <link rel="stylesheet" href="./assets/vendor/maplibre-gl-5.24.0.css">
-<link rel="stylesheet" href="./assets/app.css">
+<link rel="stylesheet" href="./assets/app.css?v=20260731-location-search">
 </head>
 <body>
 
@@ -105,6 +106,6 @@
 })();
 </script>
 
-<script type="module" src="./js/main.js?v=20260731-routing-focus"></script>
+<script type="module" src="./js/main.js?v=20260731-location-search"></script>
 </body>
 </html>
