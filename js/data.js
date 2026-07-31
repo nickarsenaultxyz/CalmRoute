@@ -4,10 +4,9 @@
  * The manifest drives every other fetch, so no path is hardcoded and a rebuild
  * can rename or version files freely.
  *
- * Only `network.geojson` is on the critical path (~246 KB gzipped). The
- * residential bulk (~358 KB) arrives on idle or when the map zooms past 13 --
- * at the default city-wide zoom those 8,900 quiet streets are visual mush, so
- * deferring them costs nothing visible.
+ * The files stay split so each layer can be filtered independently. The
+ * complete rated network is now shown by default, so residential streets load
+ * as soon as the primary facility layer is ready.
  */
 
 import { DATA_DIR } from './config.js';
@@ -44,10 +43,9 @@ export const loadCouncil = (m) => getJSON(m._url('council'));
 /**
  * Fetch the residential layer at most once.
  *
- * Because it is off by default, this is NOT prefetched — 347 KB gzipped is a
- * large download to spend on 8,908 features the visitor has not asked to see.
- * It is fetched the first time the layer is turned on, or on idle if a deep
- * link arrived with it already enabled.
+ * It is fetched immediately for the default complete-network view. A shared
+ * link that explicitly hides residential streets can still defer the request
+ * until the layer is turned back on or routing needs its geometry.
  *
  * Returns `{ ensure }`; calling it repeatedly is safe and returns the same
  * promise.
@@ -72,10 +70,7 @@ export function deferResidential(map, manifest, { onStart, onDone, eager = false
     return started;
   };
 
-  if (eager) {
-    if ('requestIdleCallback' in window) requestIdleCallback(ensure, { timeout: 4000 });
-    else setTimeout(ensure, 1200);
-  }
+  if (eager) ensure();
 
   return { ensure };
 }

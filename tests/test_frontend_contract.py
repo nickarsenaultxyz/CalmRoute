@@ -120,6 +120,7 @@ def test_calmroute_home_uses_maplibre_and_real_graph_results_only():
     view = Path("js/views/route.js").read_text()
 
     assert "view: 'route'" in state
+    assert "residential: true" in state
     assert "maplibre-gl-5.24.0" in index
     assert "leaflet" not in index.lower()
 
@@ -135,6 +136,18 @@ def test_calmroute_home_uses_maplibre_and_real_graph_results_only():
 
     for sample_only in ("Rider reports", "Climb", "Start ride", "avatar"):
         assert sample_only not in view
+
+
+def test_complete_street_network_loads_immediately_by_default():
+    data = Path("js/data.js").read_text()
+    main = Path("js/main.js").read_text()
+
+    eager_branch = data.split("if (eager)", 1)[1].split(
+        "return { ensure }", 1
+    )[0]
+    assert "ensure()" in eager_branch
+    assert "requestIdleCallback" not in eager_branch
+    assert "eager: app.state.residential" in main
 
 
 def test_all_application_lines_are_solid():
@@ -482,9 +495,7 @@ def test_the_three_layers_partition_the_network(manifest):
 
 
 def test_layer_stats_let_the_legend_report_what_is_drawn(manifest):
-    """Quiet streets are hidden by default and carry most of the low-stress
-    mileage, so a legend row showing the citywide total beside a nearly empty
-    map would be misleading. The legend needs per-layer, per-LTS mileage."""
+    """The legend needs per-layer mileage when a user hides neighbourhood streets."""
     s = load(manifest["files"]["stats"])
     for name in ("network", "context", "residential"):
         assert name in s["layers"], f"js/views/legend.js reads stats.layers.{name}"

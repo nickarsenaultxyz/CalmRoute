@@ -184,9 +184,9 @@ ride here" — which is also the order they are needed in:
 
 | File | Gzipped | Purpose |
 |---|--:|---|
-| `network.geojson` | 103 KB | built bike facilities and trails — the only thing on the critical path |
+| `network.geojson` | 103 KB | built bike facilities and trails, loaded first |
 | `context.geojson` | 164 KB | busy and prohibited roads, fetched right after |
-| `residential.geojson` | 367 KB | quiet streets, fetched only when switched on |
+| `residential.geojson` | 367 KB | quiet streets, shown and fetched by default |
 | `graph.json` | 218 KB | 11,941 nodes, for client-side routing |
 | `gaps.json` / `gaps.geojson` | 11 KB | 317 ranked barrier crossings |
 | `islands.json` | 5 KB | connected low-stress components |

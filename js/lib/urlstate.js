@@ -7,14 +7,9 @@
  * user expects. That distinction is the whole design.
  */
 
-/**
- * Residential streets default OFF.
- *
- * They are 8,908 of 14,169 features and they swamp the map: at any zoom the
- * page reads as a wall of blue, which makes route conditions and dedicated bike
- * facilities harder to distinguish. Off by default, one tap to bring back.
- */
-const DEFAULTS = { view: 'route', basemap: 'light', residential: false };
+/** Show the complete rated street network by default. The layer remains
+ * switchable for someone who wants a facilities-only view. */
+const DEFAULTS = { view: 'route', basemap: 'light', residential: true };
 
 export function read() {
   const p = new URLSearchParams(location.search);

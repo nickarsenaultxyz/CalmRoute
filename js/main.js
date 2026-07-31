@@ -6,7 +6,7 @@ import {
 import {
   deferResidential, loadContext, loadCouncil, loadGraph, loadManifest,
   loadMethodology, loadNetwork, loadStats,
-} from './data.js?v=20260729-live-data-refresh';
+} from './data.js?v=20260731-all-streets';
 import {
   addConnectorLayer, addLayers, addRouteLayers, addSources, hitLayers, setLtsVisible,
   setRoute, setRouteAccess, setRouteEndpoints, setSourceVisible,
@@ -15,7 +15,7 @@ import { clipToEnd } from './lib/graph.js';
 import { announce, easeTo, isCoarsePointer } from './lib/a11y.js';
 import {
   debounce, onPopState, read, write,
-} from './lib/urlstate.js?v=20260731-calmroute-layout';
+} from './lib/urlstate.js?v=20260731-all-streets';
 import { checkSupport, createMap, setBasemap } from './map.js?v=20260731-field-notebook';
 import { Panel } from './panel.js?v=20260731-calmroute-layout';
 import * as browse from './views/browse.js?v=20260731-field-notebook';
@@ -948,16 +948,14 @@ async function boot() {
       return;
     }
 
-    // Busy roads next. Not deferred to idle like the residential bulk: without
-    // them the map reads as a handful of disconnected trails floating in space,
-    // which overstates how good the network is.
+    // Busy roads next: without them the map reads as a handful of disconnected
+    // trails floating in space, which overstates how good the network is.
     // Start this eagerly, but keep the promise so routing can wait for the
     // geometry instead of drawing a graph result with context-road gaps.
     ensureContext().catch(() => {});
 
-    // Off by default, so this is not prefetched -- it is fetched the first time
-    // the layer is switched on (or immediately if a deep link arrived with it
-    // already enabled).
+    // The complete rated network is the default, so neighbourhood streets load
+    // immediately. A `res=0` shared link can still defer them until requested.
     app.residential = deferResidential(map, manifest, {
       eager: app.state.residential,
       onStart: () => setLoading('Adding neighbourhood streets…'),
