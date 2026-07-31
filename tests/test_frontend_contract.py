@@ -137,6 +137,18 @@ def test_calmroute_home_uses_maplibre_and_real_graph_results_only():
         assert sample_only not in view
 
 
+def test_all_application_lines_are_solid():
+    """Stress is communicated by colour, without dashed network fragments."""
+    config = Path("js/config.js").read_text()
+    layers = Path("js/layers.js").read_text()
+    styles = Path("assets/app.css").read_text()
+
+    assert "dash:" not in config
+    assert "line-dasharray" not in layers
+    assert "stroke-dasharray" not in layers
+    assert "dashed" not in styles
+
+
 # --------------------------------------------------------------------------
 #  stats — js/views/legend.js reads these exact paths
 # --------------------------------------------------------------------------

@@ -8,7 +8,7 @@
 
 import {
   FAC_PUBLIC, LTS,
-} from '../config.js?v=20260731-field-notebook';
+} from '../config.js?v=20260731-solid-lines';
 import { escapeHtml, miles as fmtMiles, minutes } from '../lib/format.js';
 
 const POINT = {
@@ -114,8 +114,6 @@ function explore(state, stats, mapState) {
       visible before you leave.
     </p>
     ${routeLegend(stats, mapState)}
-    <p class="note"><strong>Existing network only.</strong> Ratings reflect
-      built infrastructure; planned projects are shown separately.</p>
     <p class="route-footnote">Tap any street to see why it received its rating.</p>
     ${appNav()}`;
 }

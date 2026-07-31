@@ -459,7 +459,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
    matching the LTS 1 swatch rather than inventing a third accent. */
 .alt {
   margin: 12px 0 0; padding: 12px; border-radius: var(--radius);
-  border: 1px dashed var(--line); background: var(--bg);
+  border: 1px solid var(--line); background: var(--bg);
 }
 .alt b { display: block; font-size: 13.5px; }
 .alt span { display: block; font-size: 12.5px; color: var(--ink-soft); }
@@ -538,7 +538,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .step {
   display: grid; grid-template-columns: 4px 1fr auto; gap: 10px;
   padding: 9px 0; align-items: start;
-  border-bottom: var(--bw) dashed var(--line);
+  border-bottom: var(--bw) solid var(--line);
 }
 .step:last-child { border-bottom: 0; }
 .step .bar { width: 4px; min-height: 26px; height: 100%; border-radius: var(--radius-sm);

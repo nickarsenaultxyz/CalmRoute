@@ -2,7 +2,7 @@
 
 import {
   LTS, LTS_ORDER_LEGEND,
-} from './config.js?v=20260731-field-notebook';
+} from './config.js?v=20260731-solid-lines';
 import {
   deferResidential, loadContext, loadCouncil, loadGraph, loadManifest,
   loadMethodology, loadNetwork, loadStats,
@@ -10,7 +10,7 @@ import {
 import {
   addConnectorLayer, addLayers, addRouteLayers, addSources, hitLayers, setLtsVisible,
   setRoute, setRouteAccess, setRouteEndpoints, setSourceVisible,
-} from './layers.js?v=20260731-field-notebook';
+} from './layers.js?v=20260731-solid-lines';
 import { clipToEnd } from './lib/graph.js';
 import { announce, easeTo, isCoarsePointer } from './lib/a11y.js';
 import {
@@ -20,9 +20,9 @@ import { checkSupport, createMap, setBasemap } from './map.js?v=20260731-field-n
 import { Panel } from './panel.js?v=20260731-calmroute-layout';
 import * as browse from './views/browse.js?v=20260731-field-notebook';
 import * as detail from './views/detail.js?v=20260731-field-notebook';
-import * as legend from './views/legend.js?v=20260731-field-notebook';
-import * as methodology from './views/methodology.js?v=20260731-field-notebook';
-import * as routeView from './views/route.js?v=20260731-calmroute-layout';
+import * as legend from './views/legend.js?v=20260731-solid-lines';
+import * as methodology from './views/methodology.js?v=20260731-solid-lines';
+import * as routeView from './views/route.js?v=20260731-solid-lines';
 import * as settings from './views/settings.js?v=20260731-field-notebook';
 import * as share from './views/share.js?v=20260731-routing-focus';
 
@@ -607,9 +607,9 @@ function routeBetweenSnaps(g, dj, snapA, snapB, mode) {
  * Draw the route from geometry already in memory, keyed by feature id.
  *
  * The two partial edges at the ends are clipped at the snap points, and a short
- * dashed stub covers whatever is left between the pin and the network -- that
- * last bit is real (you do have to get to the street somehow) and pretending
- * otherwise would draw a route that starts in a field.
+ * thin neutral link covers whatever is left between the pin and the network --
+ * that last bit is real (you do have to get to the street somehow) and
+ * pretending otherwise would draw a route that starts in a field.
  */
 function drawRoute(result) {
   if (!result) {

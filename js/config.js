@@ -15,20 +15,15 @@ export const DATA_DIR = './data/';
  *  The rating semantics and widths are unchanged from the previous palette. */
 export const LTS = {
   0: { color: '#8f8674', width: 2.0, opacity: 0.50,
-       short: 'Bikes not permitted', detail: 'Interstate or parkway',
-       dash: [1, 2] },
+       short: 'Bikes not permitted', detail: 'Interstate or parkway' },
   1: { color: '#7d9e64', width: 5.0, opacity: 0.95,
-       short: 'Relaxed', detail: 'Good for kids and new riders',
-       dash: null },
+       short: 'Relaxed', detail: 'Good for kids and new riders' },
   2: { color: '#3d6b4a', width: 5.0, opacity: 0.95,
-       short: 'Comfortable for most adults', detail: 'Quiet streets and bike lanes',
-       dash: null },
+       short: 'Comfortable for most adults', detail: 'Quiet streets and bike lanes' },
   3: { color: '#c98a1e', width: 4.0, opacity: 0.90,
-       short: 'Busy', detail: 'For confident riders',
-       dash: [3, 1.5] },
+       short: 'Busy', detail: 'For confident riders' },
   4: { color: '#a33b1f', width: 4.0, opacity: 0.85,
-       short: 'Stressful', detail: 'Experienced riders only',
-       dash: [2, 1.5] },
+       short: 'Stressful', detail: 'Experienced riders only' },
 };
 
 export const LTS_ORDER_LEGEND = [1, 2, 3, 4, 0];
@@ -42,13 +37,8 @@ export const SOURCES = ['network', 'context', 'residential'];
 /**
  * Draw order, bottom to top.
  *
- * One layer per (source x LTS) rather than a single data-driven layer, for a
- * reason that is not obvious and was verified against the style spec:
- * `line-dasharray` is `property-type: cross-faded` with `parameters: ["zoom"]`,
- * so a data expression is rejected outright ("data expressions not supported").
- * Splitting the layers is required for the dash patterns, and it happens to buy
- * two other things — explicit paint order, and O(1) legend filtering via
- * `visibility` instead of repeated `setFilter` calls.
+ * One layer per (source x LTS) gives explicit paint order and O(1) legend
+ * filtering via `visibility` instead of rebuilding data-driven filters.
  *
  * Ordered by descending stress so low-stress paints on top, preserving the
  * previous map's deliberate fix. Within one rating, a built facility paints
