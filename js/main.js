@@ -10,8 +10,8 @@ import {
 import {
   addConnectorLayer, addLayers, addRouteLayers, addSources, hitLayers, setLtsVisible,
   setRoute, setRouteAccess, setRouteEndpoints, setSourceVisible,
-} from './layers.js?v=20260731-solid-lines';
-import { clipToEnd } from './lib/graph.js';
+} from './layers.js?v=20260731-uk-campus-thin';
+import { clipToEnd } from './lib/graph.js?v=20260731-uk-campus';
 import { announce, easeTo, isCoarsePointer } from './lib/a11y.js';
 import {
   debounce, onPopState, read, write,
@@ -19,9 +19,9 @@ import {
 import { checkSupport, createMap, setBasemap } from './map.js?v=20260731-field-notebook';
 import { Panel } from './panel.js?v=20260731-calmroute-layout';
 import * as browse from './views/browse.js?v=20260731-field-notebook';
-import * as detail from './views/detail.js?v=20260731-field-notebook';
+import * as detail from './views/detail.js?v=20260731-uk-campus';
 import * as legend from './views/legend.js?v=20260731-solid-lines';
-import * as methodology from './views/methodology.js?v=20260731-solid-lines';
+import * as methodology from './views/methodology.js?v=20260731-uk-campus';
 import * as routeView from './views/route.js?v=20260731-solid-lines';
 import * as settings from './views/settings.js?v=20260731-field-notebook';
 import * as share from './views/share.js?v=20260731-routing-focus';
@@ -353,7 +353,7 @@ async function ensureGraph() {
       if (!context || !residential) {
         throw new Error('A map geometry layer required for routing did not load.');
       }
-      const { buildGraph } = await import('./lib/graph.js');
+      const { buildGraph } = await import('./lib/graph.js?v=20260731-uk-campus');
       app.graph = buildGraph(raw);
       return app.graph;
     });
@@ -386,7 +386,7 @@ async function recomputeRoute() {
     return;
   }
   const { snapToNetwork } = await import('./lib/graph.js');
-  const dj = await import('./lib/dijkstra.js?v=20260731-field-notebook');
+  const dj = await import('./lib/dijkstra.js?v=20260731-bike-first');
 
   const geometryOf = (id) => app.featuresById.get(id)?.geometry?.coordinates;
   const snapA = snapToNetwork(g, geometryOf, from.lng, from.lat);
@@ -584,7 +584,13 @@ function routeBetweenSnaps(g, dj, snapA, snapB, mode) {
       const addA = g.eMi[snapA.edge] * a.frac;
       const addB = g.eMi[snapB.edge] * b.frac;
       const total = r.miles + addA + addB;
-      if (!best || total < best.total) best = { total, r, a, b, addA, addB };
+      const addCostA = dj.edgeCost(g, snapA.edge, mode) * a.frac;
+      const addCostB = dj.edgeCost(g, snapB.edge, mode) * b.frac;
+      const cost = r.cost + addCostA + addCostB;
+      if (!isFinite(cost)) continue;
+      if (!best || cost < best.cost) {
+        best = { total, cost, r, a, b, addA, addB };
+      }
     }
   }
   if (!best) return null;

@@ -10,6 +10,11 @@ export const layerId = (e) => `${e.src}-lts${e.lts}`;
 // without letting it compete with the route itself.
 const ROUTE_CONTEXT_OPACITY = 0.18;
 
+// Campus walkways are secondary bicycle links, not purpose-built bike
+// infrastructure. Keep them visible and selectable while letting bike lanes
+// and shared-use paths retain the stronger visual hierarchy.
+const CAMPUS_WALKWAY_WIDTH_SCALE = 0.45;
+
 const casingOpacity = (focused = false) => [
   'interpolate', ['linear'], ['zoom'],
   11, 0,
@@ -35,12 +40,16 @@ function widthExpr(base) {
     ['boolean', ['feature-state', 'selected'], false], 2.2,
     ['boolean', ['feature-state', 'hover'], false], 1.7,
     1];
+  const facilityScale = ['case',
+    ['==', ['get', 'osm_role'], 'campus_path'],
+    CAMPUS_WALKWAY_WIDTH_SCALE,
+    1];
   return ['interpolate', ['exponential', 1.4], ['zoom'],
-    10, ['*', base * 0.40, boost],
-    12, ['*', base * 0.70, boost],
-    14, ['*', base * 1.00, boost],
-    16, ['*', base * 1.75, boost],
-    18, ['*', base * 3.00, boost]];
+    10, ['*', base * 0.40, boost, facilityScale],
+    12, ['*', base * 0.70, boost, facilityScale],
+    14, ['*', base * 1.00, boost, facilityScale],
+    16, ['*', base * 1.75, boost, facilityScale],
+    18, ['*', base * 3.00, boost, facilityScale]];
 }
 
 export function addSources(map, manifest) {

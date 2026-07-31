@@ -351,6 +351,7 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
         else pd.Series("", index=edges.index)
     )
     osm_path = osm_source & osm_role.eq("path")
+    osm_campus_path = osm_source & osm_role.eq("campus_path")
     osm_access = osm_source & osm_role.eq("access")
     osm_reviewed_street = osm_source & osm_role.eq("reviewed_street")
 
@@ -404,6 +405,14 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
             "paths": {
                 "segments": int(osm_path.sum()),
                 "miles": round(float(miles[osm_path].sum()), 1),
+            },
+            "campus_walkways": {
+                "segments": int(osm_campus_path.sum()),
+                "miles": round(float(miles[osm_campus_path].sum()), 1),
+                "rating": 1,
+                "campus_relation_id": int(
+                    params.get("osm.campus_relation_id", 4815526)
+                ),
             },
             "access_roads": {
                 "segments": int(osm_access.sum()),

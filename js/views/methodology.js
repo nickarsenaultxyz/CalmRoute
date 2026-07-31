@@ -13,7 +13,7 @@
 import {
   LTS, LTS_ORDER_LEGEND,
 } from '../config.js?v=20260731-solid-lines';
-import { swatchSvg } from '../layers.js?v=20260731-solid-lines';
+import { swatchSvg } from '../layers.js?v=20260731-uk-campus-thin';
 import { escapeHtml } from '../lib/format.js';
 
 export function render(methodology, stats) {
@@ -39,12 +39,18 @@ export function render(methodology, stats) {
 
   const limits = (stats?.limitations || [])
     .map((l) => `<li>${escapeHtml(l)}</li>`).join('');
+  const campusFactor = methodology?.rules?.routing?.campus_walkway_factor ?? 1.20;
   const osmSource = stats?.osm_paths?.enabled
-    ? ` Supplementary off-road paths and explicitly bicycle-authorized access
-      roads from
+    ? ` Supplementary off-road paths, University of Kentucky campus walkways,
+      and explicitly bicycle-authorized access roads from
       <a href="https://www.openstreetmap.org/copyright"
          target="_blank" rel="noopener">OpenStreetMap contributors</a>
-      under the ODbL. The reviewed Baptist access corridor is rated LTS
+      under the ODbL. UK campus walkways are included as LTS
+      ${stats.osm_paths.campus_walkways?.rating ?? 1} because bicycles are
+      permitted on them. Calm and balanced routes apply a
+      ${campusFactor.toFixed(2)}× walkway factor so nearby purpose-built bike
+      infrastructure remains preferred; Fastest remains shortest distance.
+      The reviewed Baptist access corridor is rated LTS
       ${stats.osm_paths.access_roads?.rating ?? 2}. Commonwealth Drive is a
       reviewed missing-street exception rated LTS
       ${stats.osm_paths.reviewed_streets?.rating ?? 1}. Neither is counted as a

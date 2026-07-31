@@ -321,6 +321,11 @@ min_recall = 0.90
 max_inflation = 1.45
 
 connector_max_m = 25.0         # 162 of 254 off-road endpoints connect at 25 m
+# Separate paths may be independently digitized a few metres apart at a real
+# junction. Keep this much tighter than the street reach: on a dense campus,
+# using 25 m between paths manufactures links across lawns and between parallel
+# sidewalks.
+path_connector_max_m = 8.0
 
 # Minimum gap between interior attachment points along one path. The closest
 # eligible target at each endpoint is always retained, even inside this window,
@@ -378,14 +383,15 @@ barrier_min_island_segments = 3
 #  Enabled for the public build. A failed or out-of-range OSM fetch stops the
 #  deployment, so the live map cannot silently fall back to LFUCG-only data.
 #
-#  The Fayette County OSM relation currently has 70.0 mi of cycleway and
-#  bicycle=designated path. After de-duplication, 21.0 mi is not already in the
-#  LFUCG layer -- campus paths, apartment connectors and park links.
+#  The Fayette County query supplies cycleways and bicycle-designated paths.
+#  A separate, stable UK multipolygon supplies all non-private campus walkways;
+#  UK permits bicycles there even when OSM has no bicycle-specific tag.
 #
 #  This is importable where OSM *streets* are not. A path separated from traffic
 #  is LTS 1 by definition, which is already how LFUCG paths are rated, so
-#  nothing has to be inferred and nothing is conflated onto a centreline. OSM's
-#  261 mi of untagged paved footway is excluded: almost all of it is sidewalk.
+#  nothing has to be inferred and nothing is conflated onto a centreline.
+#  Untagged footways outside the UK relation remain excluded: almost all are
+#  ordinary sidewalks and have not received the same local review.
 #
 #  LICENSING: OpenStreetMap is ODbL. The map carries permanent attribution and
 #  the published derived data remains openly downloadable.
@@ -396,6 +402,10 @@ overpass_url = "https://overpass-api.de/api/interpreter"
 # Fayette County, Kentucky. Selecting on the name alone also matches Fayette
 # counties in several other states; the stable OSM relation id is unambiguous.
 relation_id = 130537
+# University of Kentucky campus multipolygon. This is intentionally an exact
+# relation id rather than a name query, which could match individual buildings,
+# POIs, or another institution after an OSM edit.
+campus_relation_id = 4815526
 fetch_timeout_s = 150
 fetch_attempts = 3
 
@@ -424,6 +434,11 @@ reviewed_street_connector_names = ["University Court"]
 # edit war cannot silently swing the "bike network" between builds.
 expect_min_miles = 10.0
 expect_max_miles = 40.0
+# The current campus relation contributes roughly 54 net-new walkway miles
+# after LFUCG overlap removal. This gate catches an empty/partial response and a
+# runaway boundary edit without making ordinary OSM refinements fail deployment.
+expect_min_campus_path_miles = 45.0
+expect_max_campus_path_miles = 70.0
 expect_min_access_miles = 0.3
 expect_max_access_miles = 2.0
 expect_min_reviewed_street_miles = 0.6
@@ -435,6 +450,16 @@ expect_max_reviewed_street_miles = 1.0
 required_access_names = ["Baptist Health Entrance 1"]
 
 attribution = "Supplementary paths © OpenStreetMap contributors, ODbL"
+
+
+# ---------------------------------------------------------------------------
+#  Routing preferences
+# ---------------------------------------------------------------------------
+[routing]
+# Campus walkways remain available for short, useful cut-throughs but should not
+# replace parallel purpose-built bicycle infrastructure in calm/balanced routes.
+# Fastest remains literal shortest distance and does not apply this factor.
+campus_walkway_factor = 1.20
 
 
 # ---------------------------------------------------------------------------
@@ -488,12 +513,13 @@ simplify_residential = 0.00003
 "methodology.json" = 12
 "manifest.json" = 2
 
-# Budgets that apply when osm.enabled -- 154 extra path miles land in the
-# critical-path layer. Kept separate so the default build still fails if it
-# creeps past its own, much tighter, limit.
+# Budgets that apply when osm.enabled -- roughly 75 net-new OSM path miles,
+# including all UK campus walkways, land in the critical-path layer. Kept
+# separate so the default build still fails if it creeps past its own, much
+# tighter, limit.
 [export.budget_kb_osm]
-"network.geojson" = 170
-"graph.json" = 260
+"network.geojson" = 250
+"graph.json" = 340
 
 
 # ---------------------------------------------------------------------------

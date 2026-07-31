@@ -8,6 +8,28 @@ def test_dedicated_cycle_infrastructure_is_a_path():
     assert _role({"highway": "footway", "bicycle": "designated"}) == "path"
 
 
+def test_uk_campus_walking_ways_are_paths_only_in_reviewed_scope():
+    for highway in ("footway", "path", "pedestrian"):
+        tags = {"highway": highway}
+        assert _role(tags) is None
+        assert _role(tags, campus_path=True) == "campus_path"
+
+
+def test_uk_campus_path_exception_respects_explicit_prohibitions():
+    assert _role(
+        {"highway": "footway", "bicycle": "no"},
+        campus_path=True,
+    ) is None
+    assert _role(
+        {"highway": "path", "access": "private"},
+        campus_path=True,
+    ) is None
+    assert _role(
+        {"highway": "pedestrian", "access": "no"},
+        campus_path=True,
+    ) is None
+
+
 def test_explicit_two_way_bicycle_service_road_is_access():
     assert _role({
         "highway": "service",

@@ -10,7 +10,7 @@
 
 import {
   ROUTE_LEVELS, DEFAULT_ROUTE_LEVEL,
-} from '../config.js?v=20260731-field-notebook';
+} from '../config.js?v=20260731-uk-campus';
 
 /**
  * One weight function per comfort setting, keyed by `ROUTE_LEVELS[i].key`, plus
@@ -24,7 +24,8 @@ import {
  */
 const byPenalty = (penalty) => (g, e) => {
   const p = penalty[g.eLts[e]];
-  return p === undefined || p === Infinity ? Infinity : g.eMi[e] * p;
+  const campus = g.eCampus?.[e] ? g.campusWalkwayFactor : 1;
+  return p === undefined || p === Infinity ? Infinity : g.eMi[e] * p * campus;
 };
 
 export const MODES = {
@@ -35,10 +36,15 @@ for (const level of ROUTE_LEVELS) MODES[level.key] = byPenalty(level.penalty);
 
 export const DEFAULT_MODE = ROUTE_LEVELS[DEFAULT_ROUTE_LEVEL].key;
 
+/** Effective cost of one complete edge under a public routing mode. */
+export function edgeCost(g, e, mode = DEFAULT_MODE) {
+  return (MODES[mode] || MODES[DEFAULT_MODE])(g, e);
+}
+
 /** Whether a mode can traverse an edge at all — the same question the search
  *  asks, without running one, for callers handling a single-edge trip. */
 export function passable(g, e, mode) {
-  return isFinite((MODES[mode] || MODES[DEFAULT_MODE])(g, e));
+  return isFinite(edgeCost(g, e, mode));
 }
 
 class Heap {

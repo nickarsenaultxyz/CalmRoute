@@ -1,9 +1,9 @@
 """Supplementary bicycle routing links from OpenStreetMap.
 
-The county-scoped OSM query currently carries 70.0 miles of
-``highway=cycleway`` and ``bicycle=designated`` path. After removing paths
-already present in LFUCG, 21.0 miles remain -- including campus paths,
-apartment-complex connectors and park links that the city file does not contain.
+The county-scoped OSM query carries ``highway=cycleway`` and
+``bicycle=designated`` paths. It also imports every non-private walking path
+inside the reviewed University of Kentucky campus boundary. UK permits bicycles
+on those campus walkways, but most are not tagged as cycleways in OSM.
 
 **Why this is importable when the general OSM street network is not.** A path
 separated from traffic is LTS 1 *by definition*, which is already how LFUCG
@@ -14,11 +14,11 @@ corridor and is rated LTS 1. Neither is counted as a bike facility. These
 geometries use the same attachment logic as LFUCG paths rather than creating a
 parallel street network.
 
-**What is deliberately excluded.** OSM also has 261 miles of paved
-``path``/``footway`` with no bicycle tag. Almost all of it is sidewalk.
-Importing it would inflate the network with footways, which is the kind of false
-precision this project exists to avoid. Generic, private, parking and one-way
-service roads are excluded too.
+**What is deliberately excluded.** Untagged ``path``/``footway`` geometry
+outside the configured UK campus relation remains excluded because almost all
+of it is ordinary sidewalk. Campus paths explicitly marked ``bicycle=no`` and
+paths with private/no access are excluded too. Generic, private, parking and
+one-way service roads are excluded.
 
 **Licensing.** OpenStreetMap data is ODbL. Anything published from it must carry
 attribution, and a produced database mixing it in is likely subject to
@@ -46,12 +46,14 @@ from .params import Params
 
 log = logging.getLogger(__name__)
 
-CACHE = Path(".cache/osm_bike_network_v2.json")
+CACHE = Path(".cache/osm_bike_network_v3.json")
 
 #: The general query admits only ways a cyclist is explicitly invited onto. The
-#: two named-street clauses are narrow reviewed exceptions for geometry missing
-#: from LFUCG: Commonwealth Drive and the short University Court approach that
-#: joins its west end to the existing street graph.
+#: UK campus clause is another narrow reviewed exception: generic walkways are
+#: admitted only inside the configured University of Kentucky multipolygon.
+#: The two named-street clauses cover geometry missing from LFUCG:
+#: Commonwealth Drive and the short University Court approach that joins its
+#: west end to the existing street graph.
 QUERY = """
 [out:json][timeout:{timeout}];
 rel({relation_id});
@@ -60,6 +62,10 @@ map_to_area->.a;
   way(area.a)["highway"="cycleway"];
   way(area.a)["highway"~"^(path|footway)$"]["bicycle"="designated"];
 )->.paths;
+rel({campus_relation_id});
+map_to_area->.uk_campus;
+way(area.uk_campus)["highway"~"^(path|footway|pedestrian)$"]
+  ["bicycle"!="no"]["access"!~"^(private|no)$"]->.campus_paths;
 way(area.a)["highway"="service"]["bicycle"~"^(yes|designated|permissive)$"]
   ["name"="{access_seed_name}"]->.access_seed;
 way(around.access_seed:{access_search_radius_m})["highway"="service"]
@@ -69,7 +75,7 @@ way(area.a)["highway"~"^(residential|unclassified|service)$"]
 node(w.reviewed_street)->.reviewed_street_nodes;
 way(bn.reviewed_street_nodes)["highway"~"^(residential|unclassified|service)$"]
   ["name"="{reviewed_connector_name}"]->.reviewed_street_connector;
-(.paths;.access_seed;.access_near;.reviewed_street;.reviewed_street_connector;);
+(.paths;.campus_paths;.access_seed;.access_near;.reviewed_street;.reviewed_street_connector;);
 out geom;
 """
 
@@ -96,6 +102,7 @@ def fetch(params: Params, *, use_cache: bool = True) -> gpd.GeoDataFrame | None:
     query = QUERY.format(
         timeout=int(params["osm.fetch_timeout_s"]),
         relation_id=int(params["osm.relation_id"]),
+        campus_relation_id=int(params["osm.campus_relation_id"]),
         access_seed_name=_overpass_string(
             str(params["osm.required_access_names"][0])
         ),
@@ -169,7 +176,18 @@ def _parse(payload: dict, params: Params) -> gpd.GeoDataFrame | None:
         if len(coords) < 2:
             continue
         tags = el.get("tags", {})
-        role = _role(tags, reviewed_street_names)
+        # Untagged walking ways can only have reached this payload through the
+        # UK-campus clause above. Keep that policy explicit rather than making
+        # every untagged county sidewalk a generic path in `_role`.
+        campus_candidate = (
+            tags.get("highway") in {"path", "footway", "pedestrian"}
+            and tags.get("bicycle") != "designated"
+        )
+        role = _role(
+            tags,
+            reviewed_street_names,
+            campus_path=campus_candidate,
+        )
         if role is None:
             continue
         rows.append({
@@ -179,6 +197,7 @@ def _parse(payload: dict, params: Params) -> gpd.GeoDataFrame | None:
             "osm_kind": (
                 "bicycle-access service road" if role == "access"
                 else "reviewed low-stress street" if role == "reviewed_street"
+                else "UK campus walkway" if role == "campus_path"
                 else "cycleway" if tags.get("highway") == "cycleway"
                 else "designated path"
             ),
@@ -194,7 +213,8 @@ def _parse(payload: dict, params: Params) -> gpd.GeoDataFrame | None:
     )
     rows = [
         row for i, row in enumerate(rows)
-        if row["osm_role"] in {"path", "reviewed_street"} or i in keep_access
+        if row["osm_role"] in {"path", "campus_path", "reviewed_street"}
+        or i in keep_access
     ]
     gdf = gpd.GeoDataFrame(rows, geometry="geometry", crs=4326)
     gdf = gdf.drop(columns="_nodes")
@@ -238,7 +258,12 @@ def _seeded_access_indices(rows: list[dict], seed_names: set[str]) -> set[int]:
     return seen
 
 
-def _role(tags: dict, reviewed_street_names: set[str] | None = None) -> str | None:
+def _role(
+    tags: dict,
+    reviewed_street_names: set[str] | None = None,
+    *,
+    campus_path: bool = False,
+) -> str | None:
     """Classify one OSM way, applying the narrow supplement policies.
 
     A configured reviewed street is accepted by name and permitted road class.
@@ -261,6 +286,13 @@ def _role(tags: dict, reviewed_street_names: set[str] | None = None) -> str | No
         return "path"
     if highway in {"path", "footway"} and bicycle == "designated":
         return "path"
+    if (
+        campus_path
+        and highway in {"path", "footway", "pedestrian"}
+        and bicycle != "no"
+        and tags.get("access") not in {"private", "no"}
+    ):
+        return "campus_path"
     if highway != "service" or bicycle not in {"yes", "designated", "permissive"}:
         return None
     if "parking" in name.casefold():
@@ -347,6 +379,7 @@ def as_facilities(osm: gpd.GeoDataFrame, params: Params) -> gpd.GeoDataFrame:
     out = osm.copy()
     out["fac"] = out["osm_role"].map({
         "path": "path",
+        "campus_path": "path",
         "access": "none",
         "reviewed_street": "none",
     })
@@ -373,6 +406,11 @@ def quality_gate(kept: gpd.GeoDataFrame, params: Params) -> None:
     miles = frame.geometry.length / 1609.344
     for role, label, lo_key, hi_key in [
         ("path", "paths", "osm.expect_min_miles", "osm.expect_max_miles"),
+        (
+            "campus_path", "UK campus walkways",
+            "osm.expect_min_campus_path_miles",
+            "osm.expect_max_campus_path_miles",
+        ),
         (
             "access", "bike-access roads",
             "osm.expect_min_access_miles", "osm.expect_max_access_miles",

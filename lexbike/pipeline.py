@@ -130,10 +130,10 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
 
     streets = conflate.conflate_on_road(streets, existing, params)
 
-    # Supplementary OSM paths, explicitly bicycle-authorized service roads and
-    # narrowly reviewed missing streets, if enabled. They join the same geometry
-    # attachment pipeline rather than a parallel graph; street exceptions
-    # receive no bike-facility credit below.
+    # Supplementary OSM paths, UK campus walkways, explicitly bicycle-authorized
+    # service roads and narrowly reviewed missing streets, if enabled. They join
+    # the same geometry attachment pipeline rather than a parallel graph; street
+    # exceptions receive no bike-facility credit below.
     off_road_input = existing
     osm_paths = osm_mod.fetch(params)
     if osm_paths is not None:
@@ -234,14 +234,23 @@ def write_artifacts(
     export.write_json(
         {
             "nodes": coords,
+            "campus_walkway_factor": float(
+                params["routing.campus_walkway_factor"]
+            ),
             "edges": [
-                [int(u), int(v), int(i), round(float(m), 4), int(l)]
-                for u, v, i, m, l in zip(
+                [
+                    int(u), int(v), int(i), round(float(m), 6), int(l),
+                    int(campus),
+                ]
+                for u, v, i, m, l, campus in zip(
                     routable["u"], routable["v"], routable["id"],
                     routable["mi"], routable["lts"],
+                    routable["osm_role"].fillna("").eq("campus_path"),
                 )
             ],
-            "edge_fields": ["u", "v", "id", "miles", "lts"],
+            "edge_fields": [
+                "u", "v", "id", "miles", "lts", "campus_walkway",
+            ],
         },
         out_dir / "graph.json",
     )
@@ -534,6 +543,18 @@ def assemble_edges(streets, paths, connectors, params: Params):
 
     if len(connectors):
         c = connectors.copy()
+        # A sub-metre connector can collapse to one exported coordinate. The
+        # street was still split at its target above, so path and street already
+        # share that rounded graph node; emitting a self-edge would add no route
+        # choice and can create a zero-cost Dijkstra edge.
+        decimals = int(params["meta.coord_decimals"])
+        collapsed = c.geometry.map(
+            lambda geom: (
+                tuple(round(v, decimals) for v in geom.coords[0])
+                == tuple(round(v, decimals) for v in geom.coords[-1])
+            )
+        )
+        c = c[~collapsed].copy()
         c["kind"] = "connector"
         c["rdclass"] = 6
         c["lanes"] = 1

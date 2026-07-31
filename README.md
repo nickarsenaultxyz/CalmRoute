@@ -139,7 +139,7 @@ centrelines canonical removes that entire class of problem.
 | `lex_street_data.geojson` | LFUCG | 13,775 street centrelines |
 | `Bicycle_Network_Master.geojson` | LFUCG | 542 bike facility segments |
 | `StaList_Fayette (1).csv` | KYTC | 546 traffic count stations |
-| Live Overpass query | OpenStreetMap | County-scoped cycleways, bicycle-designated paths and narrowly reviewed street exceptions |
+| Live Overpass query | OpenStreetMap | County-scoped cycleways, bicycle-designated paths, UK campus walkways, and narrowly reviewed street exceptions |
 
 A scheduled GitHub Actions build downloads the current
 [LFUCG Bicycle Network Public View](https://www.arcgis.com/home/item.html?id=90961d8f5c854453abf4123d4a99e139)
@@ -155,13 +155,21 @@ for unambiguous off-road cycling paths and service roads carrying explicit
 bicycle permission. Parking aisles, private access and one-way service roads are
 excluded. Geometry already represented by LFUCG is removed by an overlap check;
 every remaining OSM segment is marked in the download and attributed on the
-map. The reviewed Baptist Health access corridor is rated LTS 2 and does not
-count as a bike facility. Commonwealth Drive, which is missing from LFUCG, is a
-separate locally reviewed exception rated LTS 1; its short University Court
-approach is included so the west end joins the existing graph. Neither is
-presented or counted as a bike facility. A failed, empty, or unexpectedly large
-OSM response also stops deployment instead of silently reverting the public map
-to LFUCG-only data.
+map. In addition, every non-private walking path inside the exact
+[University of Kentucky campus relation](https://www.openstreetmap.org/relation/4815526)
+is imported as LTS 1 because bicycles are permitted on those campus paths;
+explicit `bicycle=no` paths remain excluded. Untagged footways elsewhere in the
+county are not imported. Calm and balanced routing treats campus walkways as
+secondary links with a 1.20× cost factor, so parallel purpose-built bicycle
+infrastructure remains preferred while useful campus cut-throughs still work;
+the Fastest option remains literal shortest distance. The reviewed Baptist
+Health access corridor is rated
+LTS 2 and does not count as a bike facility. Commonwealth Drive, which is
+missing from LFUCG, is a separate locally reviewed exception rated LTS 1; its
+short University Court approach is included so the west end joins the existing
+graph. Neither is presented or counted as a bike facility. A failed, empty, or
+unexpectedly large OSM response also stops deployment instead of silently
+reverting the public map to LFUCG-only data.
 
 A note on the bike layer, because it is easy to misread: `Type_Facility` is the
 facility that physically exists. `AltType_Facility` is a *recommended upgrade*,

@@ -162,6 +162,16 @@ def test_all_application_lines_are_solid():
     assert "dashed" not in styles
 
 
+def test_uk_campus_walkways_render_thinner_than_bike_infrastructure():
+    layers = Path("js/layers.js").read_text()
+    assert "CAMPUS_WALKWAY_WIDTH_SCALE = 0.45" in layers
+    width = layers.split("function widthExpr", 1)[1].split(
+        "export function addSources", 1
+    )[0]
+    assert "'campus_path'" in width
+    assert "facilityScale" in width
+
+
 # --------------------------------------------------------------------------
 #  stats — js/views/legend.js reads these exact paths
 # --------------------------------------------------------------------------
@@ -217,7 +227,12 @@ def test_enabled_osm_build_preserves_provenance_and_access_policy(manifest, feat
         f for f in osm
         if f["properties"].get("osm_role") == "reviewed_street"
     ]
+    campus = [
+        f for f in osm
+        if f["properties"].get("osm_role") == "campus_path"
+    ]
     assert paths, "an OSM-enabled build must export auditable path provenance"
+    assert campus, "UK campus walkways must reach the published routing graph"
     assert access, "explicitly bicycle-authorized access roads must reach the graph"
     assert reviewed, "reviewed missing streets must reach the graph"
     access_rating = stats["osm_paths"]["access_roads"]["rating"]
@@ -239,6 +254,16 @@ def test_enabled_osm_build_preserves_provenance_and_access_policy(manifest, feat
     assert {"Commonwealth Drive", "University Court"} <= reviewed_names
     assert stats["osm_paths"]["reviewed_streets"]["segments"] == len(reviewed)
     assert stats["osm_paths"]["reviewed_streets"]["miles"] > 0
+    campus_stats = stats["osm_paths"]["campus_walkways"]
+    assert campus_stats["campus_relation_id"] == 4815526
+    assert campus_stats["rating"] == 1
+    assert campus_stats["segments"] == len(campus)
+    assert campus_stats["miles"] > 0
+    assert all(f["properties"]["lts"] == 1 for f in campus)
+    assert all(f["properties"]["fac"] == 6 for f in campus)
+    assert all("u" in f["properties"] and "v" in f["properties"] for f in campus), (
+        "every published UK campus walkway must participate in routing"
+    )
 
 
 def test_baptist_health_cut_through_is_routable(manifest, features):
@@ -267,7 +292,7 @@ def test_baptist_health_cut_through_is_routable(manifest, features):
         degree[u] = degree.get(u, 0) + 1
         degree[v] = degree.get(v, 0) + 1
     for edge in graph["edges"]:
-        u, v, edge_id, miles, _ = edge
+        u, v, edge_id, miles, *_ = edge
         if edge_id not in access_ids:
             continue
         access_edge_by_id[edge_id] = edge
@@ -306,7 +331,7 @@ def test_baptist_health_cut_through_is_routable(manifest, features):
     }
     all_access_nodes = set(access_adj)
     adjacency = {}
-    for u, v, _edge_id, miles, _lts in graph["edges"]:
+    for u, v, _edge_id, miles, _lts, *_ in graph["edges"]:
         adjacency.setdefault(u, []).append((v, miles))
         adjacency.setdefault(v, []).append((u, miles))
 
@@ -443,7 +468,7 @@ def test_routing_graph_and_drawn_segments_use_the_same_lts(manifest, features):
     graph = load(manifest["files"]["graph"])
     failures = [
         (edge_id, graph_lts, by_id.get(edge_id))
-        for _u, _v, edge_id, _miles, graph_lts in graph["edges"]
+        for _u, _v, edge_id, _miles, graph_lts, *_ in graph["edges"]
         if by_id.get(edge_id) != graph_lts
     ]
     assert not failures, f"graph and map LTS disagree: {failures[:10]}"
