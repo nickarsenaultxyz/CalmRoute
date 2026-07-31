@@ -101,18 +101,24 @@ export function render(state, stats) {
 function levelSlider(level) {
   const current = ROUTE_LEVELS[level] || ROUTE_LEVELS[0];
   const ends = ROUTE_LEVELS.filter((l) => l.tick);
+  // The quietest preference is the comfortable end, so it wears the sage tag;
+  // everything below can put a rider on a busy road, so it wears the terracotta.
+  const tagClass = level >= QUIETEST_ROUTE_LEVEL ? 'tag-accent-2' : 'tag-accent';
   return `
-    <div class="stress-pref">
-      <label for="stress-level">How much do you mind busy roads?</label>
-      <input type="range" id="stress-level" data-route="level"
+    <div class="box stress-pref">
+      <div class="pref-head">
+        <label class="eyebrow" for="stress-level" style="margin:0">Comfort vs. distance</label>
+        <span class="grow"></span>
+        <span class="tag ${tagClass}">${escapeHtml(current.label)}</span>
+      </div>
+      <input type="range" class="themed" id="stress-level" data-route="level"
              min="0" max="${QUIETEST_ROUTE_LEVEL}" step="1" value="${level}"
              aria-describedby="stress-hint"
              aria-valuetext="${escapeHtml(current.label)}">
       <div class="ticks" aria-hidden="true">
         ${ends.map((l) => `<span>${escapeHtml(l.tick)}</span>`).join('')}
       </div>
-      <p class="tech" id="stress-hint"><b>${escapeHtml(current.label)}</b> —
-        ${escapeHtml(current.hint)}</p>
+      <p class="tech" id="stress-hint" style="margin-top:8px">${escapeHtml(current.hint)}</p>
     </div>`;
 }
 
