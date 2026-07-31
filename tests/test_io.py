@@ -33,3 +33,40 @@ def test_current_lfucg_bike_schema_and_blank_status_are_normalized(tmp_path):
     assert result.loc[0, "id_src"] == 42
     assert result.loc[0, "fac"] == "path"
     assert result.loc[0, "status"] == "Existing"
+    assert result.loc[0, "network_name"] == "TEST"
+
+
+def test_old_and_live_lfucg_on_road_names_are_normalized(tmp_path):
+    """Accept the road-name field before and after LFUCG's semantic swap."""
+    source = tmp_path / "bike.geojson"
+    gpd.GeoDataFrame(
+        [
+            {
+                "objectid": 207,
+                "type_facility": "Buffered Bicycle Lane",
+                "status": "Existing",
+                "type_road": "On Road",
+                "alttype_facility": None,
+                "name_facility": "Beaumont Centre Cir",
+                "name_network": None,
+                "geometry": LineString([(-84.56, 38.02), (-84.55, 38.02)]),
+            },
+            {
+                "objectid": 208,
+                "type_facility": "Buffered Bicycle Lane",
+                "status": "Existing",
+                "type_road": "On Road",
+                "alttype_facility": None,
+                "name_facility": "EXISTING BUFFERED BIKE LANE",
+                "name_network": "Beaumont Centre Cir",
+                "geometry": LineString([(-84.56, 38.021), (-84.55, 38.021)]),
+            },
+        ],
+        crs="EPSG:4326",
+    ).to_file(source, driver="GeoJSON")
+
+    result = io.load_bike_facilities(params_mod.load(), source)
+
+    assert result.loc[0, "network_name"] == "Beaumont Centre Cir"
+    assert result.loc[1, "network_name"] == "Beaumont Centre Cir"
+    assert set(result["fac"]) == {"buffered"}

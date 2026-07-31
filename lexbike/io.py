@@ -181,8 +181,29 @@ def load_bike_facilities(params: Params, path: Path = BIKE_PATH) -> gpd.GeoDataF
 
     gdf["on_road"] = _norm_text(gdf["Type_Road"]).eq("On Road")
     gdf["recommended"] = _norm_text(gdf.get("AltType_Facility"))
-    gdf["facility_name"] = _norm_text(gdf.get("Name_Facility"))
-    gdf["network_name"] = _norm_text(gdf.get("Name_Network"))
+    gdf["facility_name"] = _norm_text(gdf.get("Name_Facility")).replace("", pd.NA)
+    source_network_name = _norm_text(gdf.get("Name_Network")).replace("", pd.NA)
+
+    # LFUCG changed the meaning of Name_Facility in its public view without
+    # changing the field name. Older exports put labels such as
+    # "EXISTING BUFFERED BIKE LANE" there and stored the road in Name_Network;
+    # the live view now puts the on-road corridor name in Name_Facility.
+    # Normalize both schemas into one canonical name so exact-name conflation
+    # continues to reach paired one-way carriageways.
+    name_is_facility_label = gdf["facility_name"].str.match(
+        r"^(?:EXISTING|EXISITNG|FUNDED)\b",
+        case=False,
+        na=False,
+    )
+    live_on_road_name = (
+        gdf["on_road"]
+        & gdf["facility_name"].notna()
+        & ~name_is_facility_label
+    )
+    gdf["network_name"] = source_network_name.mask(
+        live_on_road_name,
+        gdf["facility_name"],
+    )
 
     existing = params["scenario.existing_status"]
     funded = params["scenario.funded_status"]
@@ -226,7 +247,16 @@ def load_bike_facilities(params: Params, path: Path = BIKE_PATH) -> gpd.GeoDataF
     # unbuilt infrastructure.
     name_says_funded = gdf["facility_name"].str.startswith("FUNDED", na=False)
     status_says_funded = gdf["status"].eq(funded)
-    conflict = int((name_says_funded != status_says_funded).sum())
+    # The live schema's Name_Facility is a road name, not a status label, so
+    # only compare rows that actually carry the legacy status prefix.
+    name_has_status = name_is_facility_label
+    conflict = int(
+        (
+            name_has_status
+            & gdf["status"].notna()
+            & (name_says_funded != status_says_funded)
+        ).sum()
+    )
     if conflict:
         log.warning(
             "%d segment(s) disagree between Status and the Name_Facility prefix; "
