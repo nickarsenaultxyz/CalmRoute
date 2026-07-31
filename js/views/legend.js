@@ -7,8 +7,10 @@
  * old pipeline printed to stdout and never showed anyone.
  */
 
-import { EXISTING_ONLY_NOTE, LTS, LTS_ORDER_LEGEND } from '../config.js';
-import { swatchSvg } from '../layers.js';
+import {
+  EXISTING_ONLY_NOTE, LTS, LTS_ORDER_LEGEND,
+} from '../config.js?v=20260731-field-notebook';
+import { swatchSvg } from '../layers.js?v=20260731-field-notebook';
 import { escapeHtml } from '../lib/format.js';
 
 export function render(stats, state) {

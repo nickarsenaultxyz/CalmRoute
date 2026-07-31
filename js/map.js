@@ -1,6 +1,8 @@
 /** MapLibre initialisation and basemap handling. */
 
-import { BASEMAPS, DEFAULT_BASEMAP } from './config.js';
+import {
+  BASEMAPS, DEFAULT_BASEMAP,
+} from './config.js?v=20260731-field-notebook';
 
 const RATIO = window.devicePixelRatio > 1.5 ? '@2x' : '';
 

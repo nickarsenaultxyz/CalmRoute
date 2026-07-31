@@ -2,7 +2,7 @@
 
 import {
   DEFAULT_ROUTE_LEVEL, LTS, LTS_ORDER_LEGEND, QUIETEST_ROUTE_LEVEL, ROUTE_LEVELS,
-} from './config.js';
+} from './config.js?v=20260731-field-notebook';
 import {
   deferResidential, loadContext, loadCouncil, loadGraph, loadManifest,
   loadMethodology, loadNetwork, loadStats,
@@ -10,18 +10,18 @@ import {
 import {
   addConnectorLayer, addLayers, addRouteLayers, addSources, hitLayers, setLtsVisible,
   setRoute, setRouteAccess, setRouteEndpoints, setSourceVisible,
-} from './layers.js?v=20260729-route-colors';
+} from './layers.js?v=20260731-field-notebook';
 import { clipToEnd } from './lib/graph.js';
 import { announce, easeTo, isCoarsePointer } from './lib/a11y.js';
 import { debounce, onPopState, read, write } from './lib/urlstate.js';
-import { checkSupport, createMap, setBasemap } from './map.js?v=20260731-commonwealth-lts1';
+import { checkSupport, createMap, setBasemap } from './map.js?v=20260731-field-notebook';
 import { Panel } from './panel.js';
-import * as browse from './views/browse.js';
-import * as detail from './views/detail.js?v=20260731-routing-focus';
-import * as legend from './views/legend.js?v=20260731-routing-focus';
-import * as methodology from './views/methodology.js?v=20260731-commonwealth-lts1';
-import * as routeView from './views/route.js?v=20260731-location-search';
-import * as settings from './views/settings.js';
+import * as browse from './views/browse.js?v=20260731-field-notebook';
+import * as detail from './views/detail.js?v=20260731-field-notebook';
+import * as legend from './views/legend.js?v=20260731-field-notebook';
+import * as methodology from './views/methodology.js?v=20260731-field-notebook';
+import * as routeView from './views/route.js?v=20260731-field-notebook';
+import * as settings from './views/settings.js?v=20260731-field-notebook';
 import * as share from './views/share.js?v=20260731-routing-focus';
 
 const els = {
@@ -383,7 +383,7 @@ async function recomputeRoute() {
     return;
   }
   const { snapToNetwork } = await import('./lib/graph.js');
-  const dj = await import('./lib/dijkstra.js');
+  const dj = await import('./lib/dijkstra.js?v=20260731-field-notebook');
 
   const geometryOf = (id) => app.featuresById.get(id)?.geometry?.coordinates;
   const snapA = snapToNetwork(g, geometryOf, from.lng, from.lat);

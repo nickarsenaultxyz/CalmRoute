@@ -1,6 +1,8 @@
 /** Data layer construction and visibility. */
 
-import { FAC_CONNECTOR, LAYERS, LTS, SOURCES } from './config.js';
+import {
+  FAC_CONNECTOR, LAYERS, LTS, SOURCES,
+} from './config.js?v=20260731-field-notebook';
 
 export const layerId = (e) => `${e.src}-lts${e.lts}`;
 
