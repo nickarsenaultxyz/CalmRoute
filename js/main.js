@@ -14,12 +14,12 @@ import {
 import { clipToEnd } from './lib/graph.js';
 import { announce, easeTo, isCoarsePointer } from './lib/a11y.js';
 import { debounce, onPopState, read, write } from './lib/urlstate.js';
-import { checkSupport, createMap, setBasemap } from './map.js?v=20260730-bike-access-roads';
+import { checkSupport, createMap, setBasemap } from './map.js?v=20260731-baptist-lts2';
 import { Panel } from './panel.js';
 import * as browse from './views/browse.js';
-import * as detail from './views/detail.js?v=20260730-bike-access-roads';
+import * as detail from './views/detail.js?v=20260731-baptist-lts2';
 import * as legend from './views/legend.js';
-import * as methodology from './views/methodology.js?v=20260730-bike-access-roads';
+import * as methodology from './views/methodology.js?v=20260731-baptist-lts2';
 import * as routeView from './views/route.js';
 import * as settings from './views/settings.js';
 import * as share from './views/share.js';

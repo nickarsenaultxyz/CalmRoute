@@ -107,7 +107,9 @@ def test_enabled_osm_build_preserves_provenance_and_access_policy(manifest, feat
     access = [f for f in osm if f["properties"]["fac"] == 0]
     assert paths, "an OSM-enabled build must export auditable path provenance"
     assert access, "explicitly bicycle-authorized access roads must reach the graph"
-    assert all(f["properties"]["lts"] == 3 for f in access)
+    access_rating = stats["osm_paths"]["access_roads"]["rating"]
+    assert access_rating == 2
+    assert all(f["properties"]["lts"] == access_rating for f in access)
     assert all(f["properties"]["kind"] == 0 for f in access)
 
     names = {f["properties"].get("nm") for f in access}
