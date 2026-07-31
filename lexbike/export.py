@@ -9,7 +9,7 @@ times.
 **Keys are omitted when unknown, never emitted as null.** This is smaller, and
 more importantly it forces the UI to branch on presence rather than render the
 empty cell that is the current map's bug — AADT is a real measurement for only
-15% of segments.
+about 13% of published segments.
 
 **Coordinates are rounded to ``meta.coord_decimals``.** Rounding is
 topology-safe: identical input coordinates round identically, so the exact
@@ -86,8 +86,8 @@ def add_provenance(
     """Add ``basis`` and ``cf`` (confidence).
 
     These exist so the map can be honest about a real weakness: KYTC only counts
-    state-maintained routes, so 85% of segments carry an imputed volume drawn
-    from the busiest third of their class. Surfacing that per segment is the
+    state-maintained routes, so most segments carry either a validated model
+    estimate or a class-median fallback. Surfacing that per segment is the
     difference between a map a planner will engage with and one they dismiss.
 
     The sensitivity sweep later demotes any segment whose LTS flips under a
@@ -111,7 +111,11 @@ def add_provenance(
     has_facility = out["fac"] != "none"
 
     conf = np.full(len(out), CONF_LOW, dtype="int8")
-    conf = np.where(src == io.AADT_IMPUTED_NARROW, CONF_MEDIUM, conf)
+    conf = np.where(
+        src.isin([io.AADT_IMPUTED_NARROW, io.AADT_IMPUTED_MODEL]),
+        CONF_MEDIUM,
+        conf,
+    )
     conf = np.where(
         off_stream | ((src == io.AADT_STATION) & (has_facility | local)),
         CONF_HIGH, conf,
@@ -187,6 +191,16 @@ def _feature(row, decimals: int) -> dict:
     reviewed = row.get("connector_reviewed")
     if reviewed is not None and not pd.isna(reviewed) and bool(reviewed):
         props["rv"] = 1
+
+    aadt_source = row.get("aadt_src")
+    if (
+        aadt_source is not None
+        and not pd.isna(aadt_source)
+        and int(aadt_source) == io.AADT_IMPUTED_MODEL
+    ):
+        # Omit the common station/median values; mark only model estimates so
+        # the detail panel can explain their provenance without payload bloat.
+        props["am"] = 1
 
     return {
         "type": "Feature",
@@ -381,6 +395,8 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
             "aadt_count_years": extra.get("aadt_years", {}),
             "aadt_measured_segments": extra.get("aadt_measured", 0),
             "aadt_measured_pct": extra.get("aadt_measured_pct", 0.0),
+            "aadt_model_segments": extra.get("aadt_model_segments", 0),
+            "aadt_model_pct": extra.get("aadt_model_pct", 0.0),
         },
         "osm_paths": {
             "enabled": bool(params.get("osm.enabled", False)),
@@ -414,8 +430,9 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
         },
         "limitations": [
             params["coverage.note"],
-            "Traffic counts exist only on state-maintained routes, so volumes for "
-            "most local streets are imputed from class medians and are estimates.",
+            "Traffic counts exist only on a biased subset of roads. A validated "
+            "model estimates represented road classes; local and unsupported "
+            "streets retain class-median estimates.",
             "Lane counts are not in any source; they are inferred from road class, "
             "one-way status and cartographic class.",
             "On-street parking and bike lane width are not modelled - neither is "

@@ -54,6 +54,19 @@ def test_known_properties_are_emitted_with_short_keys(params):
     assert p["mi"] == pytest.approx(0.34)
 
 
+def test_modelled_aadt_is_marked_for_the_detail_panel(params):
+    from lexbike import io
+
+    modelled = export._feature(
+        pd.Series(row(aadt=4800.0, aadt_src=io.AADT_IMPUTED_MODEL)), 5
+    )
+    measured = export._feature(
+        pd.Series(row(aadt=4800.0, aadt_src=io.AADT_STATION)), 5
+    )
+    assert modelled["properties"]["am"] == 1
+    assert "am" not in measured["properties"]
+
+
 def test_feature_id_is_top_level_for_maplibre_feature_state(params):
     """MapLibre's promoteId/feature-state hover needs a top-level id."""
     f = export._feature(pd.Series(row(id=98765)), 5)
@@ -132,6 +145,17 @@ def test_coarsely_imputed_volume_yields_low_confidence(params):
     gdf = _frame([row(aadt_src=io.AADT_IMPUTED_COARSE, rdclass=5, fac="none")])
     out = export.add_provenance(gdf, params)
     assert out["cf"].iloc[0] == export.CONF_LOW
+    assert out["basis"].iloc[0] == export.BASIS_TYPE_SPEED
+
+
+def test_modelled_volume_yields_medium_confidence(params):
+    from lexbike import io
+
+    gdf = _frame([row(
+        aadt_src=io.AADT_IMPUTED_MODEL, rdclass=5, fac="none"
+    )])
+    out = export.add_provenance(gdf, params)
+    assert out["cf"].iloc[0] == export.CONF_MEDIUM
     assert out["basis"].iloc[0] == export.BASIS_TYPE_SPEED
 
 

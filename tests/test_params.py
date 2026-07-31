@@ -101,6 +101,13 @@ def test_reviewed_connectors_are_narrowly_scoped():
     assert max(c["max_m"] for c in connectors) <= 90
 
 
+def test_aadt_model_excludes_underrepresented_local_streets():
+    p = params_mod.load()
+    assert set(p["aadt.model.eligible_rdclasses"]) == {1, 2, 3, 4, 5}
+    assert 0.5 < p["aadt.model.quantile"] < 1
+    assert p["aadt.model.min_station_keys"] >= 100
+
+
 def test_sensitivity_runs_reference_real_parameters():
     """Every sweep variant must be applicable, or the sweep is a no-op."""
     p = params_mod.load()

@@ -178,7 +178,7 @@ export const KIND_PUBLIC = {
 };
 
 /** `basis` codes, mirroring lexbike/export.py. Only BASIS_MEASURED means the
- *  traffic figure came from a real KYTC count rather than a class median. */
+ *  traffic figure came from a real KYTC count rather than an estimate. */
 export const BASIS_TYPE_ONLY = 0;
 export const BASIS_ESTIMATED = 1;
 export const BASIS_MEASURED = 2;

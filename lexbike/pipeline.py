@@ -288,6 +288,12 @@ def write_artifacts(
         "aadt_measured": int((edges["aadt_src"] == io.AADT_STATION).sum()),
         "aadt_measured_pct": round(
             100 * float((edges["aadt_src"] == io.AADT_STATION).mean()), 1),
+        "aadt_model_segments": int(
+            (edges["aadt_src"] == io.AADT_IMPUTED_MODEL).sum()
+        ),
+        "aadt_model_pct": round(
+            100 * float((edges["aadt_src"] == io.AADT_IMPUTED_MODEL).mean()), 1
+        ),
     })
     # Per-layer totals, so the legend can label the residential toggle with a
     # real figure instead of deriving one in JavaScript and risking drift.

@@ -120,6 +120,8 @@ def test_stats_paths_the_legend_reads(manifest):
     # detail.js dates the traffic figure from this; an undated count would
     # imply it is current, and these span 2001-2024.
     assert s["data_sources"]["aadt_count_years"]["median"]
+    assert s["data_sources"]["aadt_model_segments"] > 0
+    assert s["data_sources"]["aadt_model_pct"] > 0
 
 
 # --------------------------------------------------------------------------
