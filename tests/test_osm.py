@@ -1,11 +1,95 @@
 """Policy tests for the deliberately narrow OSM routing supplement."""
 
-from lexbike.osm import _role, _seeded_access_indices
+from shapely.geometry import LineString, Polygon
+
+from lexbike.osm import (
+    QUERY,
+    _overpass_poly,
+    _parse,
+    _role,
+    _seeded_access_indices,
+)
+from lexbike.params import load
 
 
 def test_dedicated_cycle_infrastructure_is_a_path():
     assert _role({"highway": "cycleway"}) == "path"
     assert _role({"highway": "footway", "bicycle": "designated"}) == "path"
+
+
+def test_uk_campus_walking_ways_are_paths_only_in_reviewed_scope():
+    for highway in ("footway", "path", "pedestrian"):
+        tags = {"highway": highway}
+        assert _role(tags) is None
+        assert _role(tags, campus_path=True) == "campus_path"
+
+
+def test_uk_campus_path_exception_respects_explicit_prohibitions():
+    assert _role(
+        {"highway": "footway", "bicycle": "no"},
+        campus_path=True,
+    ) is None
+    assert _role(
+        {"highway": "path", "access": "private"},
+        campus_path=True,
+    ) is None
+    assert _role(
+        {"highway": "pedestrian", "access": "no"},
+        campus_path=True,
+    ) is None
+
+
+def test_generic_walkways_are_queried_and_clipped_to_the_academic_core():
+    params = load()
+    polygon_coords = params["osm.academic_core_polygon"]
+    encoded = _overpass_poly(polygon_coords)
+    first_lon, first_lat = polygon_coords[0]
+
+    assert encoded.split()[:2] == [str(float(first_lat)), str(float(first_lon))]
+    assert 'way(poly:"{academic_core_poly}")' in QUERY
+    assert "area.uk_campus" not in QUERY
+
+    payload = {
+        "elements": [{
+            "type": "way",
+            "id": 123,
+            "nodes": [1, 2],
+            "tags": {"highway": "footway"},
+            "geometry": [
+                {"lon": -84.510, "lat": 38.038},
+                {"lon": -84.498, "lat": 38.038},
+            ],
+        }]
+    }
+    result = _parse(payload, params)
+    geometry = result.iloc[0].geometry
+    core = Polygon(polygon_coords)
+
+    assert result.iloc[0].osm_role == "campus_path"
+    assert core.buffer(1e-12).covers(geometry)
+    assert geometry.length < LineString([
+        (-84.510, 38.038), (-84.498, 38.038)
+    ]).length
+
+
+def test_bicycle_designated_paths_remain_available_outside_the_academic_core():
+    params = load()
+    payload = {
+        "elements": [{
+            "type": "way",
+            "id": 456,
+            "nodes": [1, 2],
+            "tags": {"highway": "footway", "bicycle": "designated"},
+            "geometry": [
+                {"lon": -84.550, "lat": 38.050},
+                {"lon": -84.549, "lat": 38.050},
+            ],
+        }]
+    }
+    result = _parse(payload, params)
+
+    assert result.iloc[0].osm_role == "path"
+    assert result.iloc[0].geometry.coords[0] == (-84.550, 38.050)
 
 
 def test_explicit_two_way_bicycle_service_road_is_access():

@@ -2,13 +2,18 @@
 
 import {
   FAC_CONNECTOR, LAYERS, LTS, SOURCES,
-} from './config.js?v=20260731-field-notebook';
+} from './config.js?v=20260731-solid-lines';
 
 export const layerId = (e) => `${e.src}-lts${e.lts}`;
 
 // Keep the rest of the network as geographic context while a route is shown,
 // without letting it compete with the route itself.
 const ROUTE_CONTEXT_OPACITY = 0.18;
+
+// Campus walkways are secondary bicycle links, not purpose-built bike
+// infrastructure. Keep them visible and selectable while letting bike lanes
+// and shared-use paths retain the stronger visual hierarchy.
+const CAMPUS_WALKWAY_WIDTH_SCALE = 0.45;
 
 const casingOpacity = (focused = false) => [
   'interpolate', ['linear'], ['zoom'],
@@ -35,12 +40,16 @@ function widthExpr(base) {
     ['boolean', ['feature-state', 'selected'], false], 2.2,
     ['boolean', ['feature-state', 'hover'], false], 1.7,
     1];
+  const facilityScale = ['case',
+    ['==', ['get', 'osm_role'], 'campus_path'],
+    CAMPUS_WALKWAY_WIDTH_SCALE,
+    1];
   return ['interpolate', ['exponential', 1.4], ['zoom'],
-    10, ['*', base * 0.40, boost],
-    12, ['*', base * 0.70, boost],
-    14, ['*', base * 1.00, boost],
-    16, ['*', base * 1.75, boost],
-    18, ['*', base * 3.00, boost]];
+    10, ['*', base * 0.40, boost, facilityScale],
+    12, ['*', base * 0.70, boost, facilityScale],
+    14, ['*', base * 1.00, boost, facilityScale],
+    16, ['*', base * 1.75, boost, facilityScale],
+    18, ['*', base * 3.00, boost, facilityScale]];
 }
 
 export function addSources(map, manifest) {
@@ -99,25 +108,13 @@ export function addLayers(map) {
       source: entry.src,
       filter,
       layout: {
-        // Round caps swallow short dashes and the pattern silently disappears,
-        // taking the non-colour channel with it.
-        'line-cap': style.dash ? 'butt' : 'round',
+        'line-cap': 'round',
         'line-join': 'round',
       },
       paint: {
         'line-color': style.color,
         'line-width': widthExpr(base),
         'line-opacity': style.opacity,
-        // `line-dasharray` is a PAINT property, not layout. Putting it in
-        // layout is rejected by the style spec ("unknown property") and every
-        // dashed layer renders solid.
-        //
-        // It is also `property-type: cross-faded` with `parameters: ["zoom"]`,
-        // so it accepts a constant or a zoom expression but NOT a data
-        // expression -- ['match', ['get','lts'], ...] fails with "data
-        // expressions not supported". That is why there is one layer per LTS
-        // rather than a single data-driven layer.
-        ...(style.dash ? { 'line-dasharray': style.dash } : {}),
       },
     });
   }
@@ -132,12 +129,11 @@ export function addConnectorLayer(map) {
     map.addLayer({
       id, type: 'line', source: src,
       filter: ['==', ['coalesce', ['get', 'fac'], 0], FAC_CONNECTOR],
-      layout: { 'line-cap': 'butt' },
+      layout: { 'line-cap': 'round' },
       paint: {
         'line-color': LTS[1].color,
         'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.8, 17, 2],
         'line-opacity': connectorOpacity(),
-        'line-dasharray': [1, 1.5],
       },
     });
   }
@@ -173,14 +169,12 @@ export function setSourceVisible(map, src, visible) {
   }
 }
 
-/** Inline SVG swatch matching the map exactly, dash pattern included, so the
- *  legend teaches the non-colour channel rather than only the colour. */
+/** Inline SVG swatch matching the map's solid LTS line. */
 export function swatchSvg(lts) {
   const s = LTS[lts];
-  const dash = s.dash ? ` stroke-dasharray="${s.dash.map((d) => d * 2.2).join(' ')}"` : '';
   return `<svg class="swatch" viewBox="0 0 34 12" aria-hidden="true">
     <line x1="1" y1="6" x2="33" y2="6" stroke="${s.color}"
-          stroke-width="${Math.max(3, s.width)}" stroke-linecap="butt"${dash}/>
+          stroke-width="${Math.max(3, s.width)}" stroke-linecap="round"/>
   </svg>`;
 }
 
@@ -224,10 +218,8 @@ export function addRouteLayers(map) {
     id: 'route-access', type: 'line', source: 'route-access',
     layout: { 'line-cap': 'round' },
     paint: {
-      // Visible enough to read as "you have to get here yourself", distinct
-      // enough from the solid route not to be mistaken for part of the ride.
+      // Thin neutral access line: visible, but distinct from the coloured ride.
       'line-color': '#6f6858', 'line-width': 3.5, 'line-opacity': 0.9,
-      'line-dasharray': [1.5, 1.5],
     },
   });
   map.addLayer({

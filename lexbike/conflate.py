@@ -34,6 +34,7 @@ Matching strategy. Three options, and why this one:
 
 from __future__ import annotations
 
+from collections import defaultdict
 import logging
 import math
 from typing import Iterable
@@ -439,7 +440,16 @@ def _check_mileage(
 #  Off-road paths and their connectors
 # ---------------------------------------------------------------------------
 
-def _find_attachments(part, candidates, tree, max_m, spacing_m, merge_m):
+def _find_attachments(
+    part,
+    candidates,
+    tree,
+    max_m,
+    spacing_m,
+    merge_m,
+    *,
+    endpoints_only=False,
+):
     """Points along a path where it can join another line.
 
     Returns ``[(distance_along_path, snapped_point_on_target, target_index,
@@ -468,6 +478,8 @@ def _find_attachments(part, candidates, tree, max_m, spacing_m, merge_m):
     best: dict[int, tuple[float, float, Point]] = {}
 
     for idx, (x, y) in enumerate(coords):
+        if endpoints_only and idx not in {0, len(coords) - 1}:
+            continue
         pt = Point(x, y)
         # Every candidate within reach, not merely the nearest one.
         for k in tree.query(pt.buffer(max_m)):
@@ -476,13 +488,19 @@ def _find_attachments(part, candidates, tree, max_m, spacing_m, merge_m):
             gap = line.distance(pt)
             if gap > max_m:
                 continue
+            target_along = line.project(pt)
+            if target_along <= merge_m:
+                snapped = Point(line.coords[0])
+            elif line.length - target_along <= merge_m:
+                snapped = Point(line.coords[-1])
+            else:
+                snapped = line.interpolate(target_along)
             is_end = idx == 0 or idx == len(coords) - 1
             # An endpoint outranks a mid-path vertex for the same target.
             score = gap - (max_m if is_end else 0.0)
             prior = best.get(k)
             if prior is None or score < prior[0]:
-                best[k] = (score, part.project(pt),
-                           line.interpolate(line.project(pt)), pt)
+                best[k] = (score, part.project(pt), snapped, pt)
 
     found = [(along, snapped, k, src) for k, (_, along, snapped, src) in best.items()]
     found.sort(key=lambda t: t[0])
@@ -547,7 +565,14 @@ def _with_max_spacing(cuts: list[float], total: float, max_edge_m: float) -> lis
     return sorted(out)
 
 
-def _find_path_junctions(part, self_index, off, path_tree, max_m):
+def _find_path_junctions(
+    part,
+    self_index,
+    off,
+    path_tree,
+    endpoint_max_m,
+    interior_max_m,
+):
     """Points where this path comes close to a *different* path.
 
     Returns the same shape as :func:`_find_attachments`, with the target index
@@ -560,8 +585,10 @@ def _find_path_junctions(part, self_index, off, path_tree, max_m):
     out = []
     seen: set[int] = set()
     coords = list(part.coords)
-    for x, y in coords:
+    for idx, (x, y) in enumerate(coords):
         pt = Point(x, y)
+        is_endpoint = idx == 0 or idx == len(coords) - 1
+        max_m = endpoint_max_m if is_endpoint else interior_max_m
         for k in path_tree.query(pt.buffer(max_m)):
             k = int(k)
             if k == self_index or k in seen:
@@ -570,10 +597,40 @@ def _find_path_junctions(part, self_index, off, path_tree, max_m):
             if other.distance(pt) > max_m:
                 continue
             seen.add(k)
+            target_along = other.project(pt)
+            if target_along <= interior_max_m:
+                snapped = Point(other.coords[0])
+            elif other.length - target_along <= interior_max_m:
+                snapped = Point(other.coords[-1])
+            else:
+                snapped = other.interpolate(target_along)
             out.append((part.project(pt),
-                        other.interpolate(other.project(pt)),
+                        snapped,
                         -(k + 1),
                         pt))
+    return out
+
+
+def _dedupe_connectors(connectors: list[dict]) -> list[dict]:
+    """Remove identical synthetic links emitted by adjacent path records.
+
+    OSM commonly splits two walkways at the same junction. Both records then
+    discover the same source-to-street link. Publishing both adds a parallel
+    graph edge and draws a heavier line without adding any routing choice.
+    """
+    out = []
+    seen = set()
+    for row in connectors:
+        coords = list(row["geometry"].coords)
+        ends = sorted(
+            (round(float(x), 3), round(float(y), 3))
+            for x, y in (coords[0], coords[-1])
+        )
+        key = tuple(ends)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(row)
     return out
 
 
@@ -606,6 +663,7 @@ def build_off_road(
     from .network import cut_line
 
     max_m = float(params["conflation.connector_max_m"])
+    path_max_m = float(params["conflation.path_connector_max_m"])
     spacing_m = float(params["conflation.attach_spacing_m"])
     merge_m = float(params["conflation.attach_merge_m"])
     max_edge_m = float(params["conflation.max_path_edge_m"])
@@ -640,15 +698,41 @@ def build_off_road(
     path_rows: list[dict] = []
     attach_count = 0
 
+    # Discover path-to-path junctions before cutting either side. A non-zero
+    # connector must split both its source and its target; the old one-pass
+    # implementation cut only the source and left hundreds of connector ends
+    # visually touching the middle of a target path without a graph node there.
+    junctions_by_part: dict[tuple[int, int], list[tuple]] = {}
+    target_cuts: dict[int, list[Point]] = defaultdict(list)
+    for i, geom in enumerate(off.geometry):
+        for part_index, part in enumerate(getattr(geom, "geoms", [geom])):
+            junctions = _find_path_junctions(
+                part,
+                i,
+                off,
+                path_tree,
+                endpoint_max_m=path_max_m,
+                interior_max_m=merge_m,
+            )
+            junctions_by_part[(i, part_index)] = junctions
+            for _, snapped, target_index, _ in junctions:
+                target_cuts[-target_index - 1].append(snapped)
+
     for i, geom in enumerate(off.geometry):
         template = off.iloc[i].to_dict()
-        for part in getattr(geom, "geoms", [geom]):
+        for part_index, part in enumerate(getattr(geom, "geoms", [geom])):
             if part.length <= 0:
                 continue
             attachments = _find_attachments(
-                part, candidates, tree, max_m, spacing_m, merge_m)
-            attachments += _find_path_junctions(
-                part, i, off, path_tree, max_m)
+                part,
+                candidates,
+                tree,
+                max_m,
+                spacing_m,
+                merge_m,
+                endpoints_only=template.get("osm_role") == "campus_path",
+            )
+            attachments += junctions_by_part.get((i, part_index), [])
             # One list, sorted, so the cut points below stay in order.
             attachments.sort(key=lambda t: t[0])
             attach_count += len(attachments)
@@ -657,6 +741,18 @@ def build_off_road(
             # real nodes. Endpoints need no cut; they already are nodes.
             interior = sorted(
                 d for d, _, _, _ in attachments if 1e-6 < d < part.length - 1e-6)
+            for target_point in target_cuts.get(i, []):
+                if part.distance(target_point) <= 1e-6:
+                    d = part.project(target_point)
+                    if 1e-6 < d < part.length - 1e-6:
+                        interior.append(d)
+            interior = sorted(set(interior))
+            # A closed walkway otherwise becomes a self-edge and the router has
+            # to discard it. Split at the opposite side so both halves retain
+            # real graph endpoints and the entire loop remains routable.
+            if part.is_ring:
+                interior.append(part.length / 2)
+                interior = sorted(set(interior))
             # Guarantee a node at least every max_path_edge_m, so a long rural
             # trail is not one edge a route can only leave at its ends.
             interior = _with_max_spacing(interior, part.length, max_edge_m)
@@ -700,14 +796,15 @@ def build_off_road(
     # the map and configured explicitly. Keep them out of `connector_max_m`:
     # raising the citywide search radius to reach an 87 m campus connection
     # would create hundreds of unreviewed shortcuts across blocks and parcels.
+    connectors = _dedupe_connectors(connectors)
     reviewed = _reviewed_connectors(off, candidates, params)
     connectors.extend(reviewed)
 
     log.info(
         "off-road: %d paths -> %d pieces, %d attachment points, %d connectors "
-        "(%d reviewed; automatic max %.0f m, interior spacing %.0f m)",
+        "(%d reviewed; street max %.0f m, path max %.0f m, interior spacing %.0f m)",
         len(off), len(path_rows), attach_count, len(connectors), len(reviewed),
-        max_m, spacing_m,
+        max_m, path_max_m, spacing_m,
     )
     if len(off) and attach_count == 0:
         raise ConflationError(
@@ -736,8 +833,23 @@ def build_off_road(
             geometry="geometry", crs=crs,
         )
 
+    paths_result = paths_out.to_crs(streets.crs)
+    decimals = int(params["meta.coord_decimals"])
+    collapsed_path = paths_result.geometry.map(
+        lambda geom: (
+            tuple(round(v, decimals) for v in geom.coords[0])
+            == tuple(round(v, decimals) for v in geom.coords[-1])
+        )
+    )
+    if collapsed_path.any():
+        log.info(
+            "off-road: omitted %d sub-export-precision path pieces",
+            int(collapsed_path.sum()),
+        )
+        paths_result = paths_result[~collapsed_path].copy()
+
     return (
-        paths_out.to_crs(streets.crs),
+        paths_result,
         conn_out.to_crs(streets.crs) if len(conn_out) else conn_out,
     )
 

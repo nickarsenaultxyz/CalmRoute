@@ -35,8 +35,11 @@ def features_by_id():
 
 
 def test_edge_field_order_matches_the_client(graph):
-    """js/lib/graph.js destructures [u, v, id, mi, lts] positionally."""
-    assert graph["edge_fields"] == ["u", "v", "id", "miles", "lts"]
+    """js/lib/graph.js destructures graph edge fields positionally."""
+    assert graph["edge_fields"] == [
+        "u", "v", "id", "miles", "lts", "campus_parallel_bike",
+    ]
+    assert graph["campus_parallel_bike_factor"] > 1
 
 
 def test_every_edge_endpoint_is_a_real_node(graph):
@@ -60,6 +63,19 @@ def test_lts_values_have_a_routing_penalty(graph):
     value is treated as impassable, so the edge would silently vanish from the
     network at every comfort setting rather than being routed over."""
     assert {e[4] for e in graph["edges"]} <= {0, 1, 2, 3, 4}
+
+
+def test_only_parallel_uk_walkways_receive_the_secondary_route_flag(
+    graph, features_by_id,
+):
+    for edge in graph["edges"]:
+        expected = int(features_by_id[edge[2]]["properties"].get("cb") == 1)
+        assert edge[5] == expected
+        if edge[5]:
+            assert (
+                features_by_id[edge[2]]["properties"].get("osm_role")
+                == "campus_path"
+            )
 
 
 def test_edge_ids_resolve_to_drawable_features(graph):
@@ -174,6 +190,22 @@ def test_no_connector_is_longer_than_its_reviewed_search_radius(graph):
     )
 
 
+def test_every_connector_is_noded_at_both_ends(graph, features_by_id):
+    """A connector drawn into the middle of an unsplit path is not routable."""
+    degree = {}
+    for u, v, *_ in graph["edges"]:
+        degree[u] = degree.get(u, 0) + 1
+        degree[v] = degree.get(v, 0) + 1
+    dangling = [
+        edge[2] for edge in graph["edges"]
+        if features_by_id[edge[2]]["properties"].get("fac") == 7
+        and (degree.get(edge[0], 0) < 2 or degree.get(edge[1], 0) < 2)
+    ]
+    assert not dangling, (
+        f"{len(dangling)} connector(s) do not join network edges at both ends"
+    )
+
+
 def test_reviewed_campus_connectors_join_the_intended_streets(graph):
     """The two requested campus links must be genuine graph junctions."""
     features = {}
@@ -248,16 +280,29 @@ def test_reviewed_campus_connectors_join_the_intended_streets(graph):
             ]
             assert source_paths, "Scott connector does not touch the cycleway"
 
+            # Several newly imported campus paths can split this short
+            # connection into more than one path/connector edge. Follow only
+            # that low-stress facility component; do not escape through the
+            # reviewed Scott Street connector and accidentally prove reachability
+            # through the whole street graph.
             reaches_sellers_alley = False
-            for path in source_paths:
-                path_u = path["properties"]["u"]
-                path_v = path["properties"]["v"]
-                other_node = path_v if path_u == source_node else path_u
-                neighbouring_names = {
-                    features[edge_id]["properties"].get("nm")
-                    for edge_id in adjacency[other_node]
-                }
-                reaches_sellers_alley |= "Sellers Aly" in neighbouring_names
+            seen = {source_node}
+            frontier = [source_node]
+            while frontier and not reaches_sellers_alley:
+                node = frontier.pop()
+                for edge_id in adjacency[node]:
+                    props = features[edge_id]["properties"]
+                    if props.get("nm") == "Sellers Aly":
+                        reaches_sellers_alley = True
+                        break
+                    if props.get("fac") not in {6, 7} or props.get("rv") == 1:
+                        continue
+                    other = (
+                        props["v"] if props["u"] == node else props["u"]
+                    )
+                    if other not in seen:
+                        seen.add(other)
+                        frontier.append(other)
             assert reaches_sellers_alley, (
                 "Scott connector's cycleway does not join Sellers Alley"
             )
@@ -278,7 +323,7 @@ def test_the_low_stress_network_is_actually_routable(graph):
             x = parent[x]
         return x
 
-    for u, v, _id, _mi, lts in graph["edges"]:
+    for u, v, _id, _mi, lts, *_ in graph["edges"]:
         if lts in (1, 2):
             a, b = find(u), find(v)
             if a != b:

@@ -187,6 +187,8 @@ def _feature(row, decimals: int) -> dict:
         role = row.get("osm_role")
         if role is not None and not pd.isna(role):
             props["osm_role"] = str(role)
+    if bool(row.get("campus_parallel_bike", False)):
+        props["cb"] = 1
 
     reviewed = row.get("connector_reviewed")
     if reviewed is not None and not pd.isna(reviewed) and bool(reviewed):
@@ -351,6 +353,12 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
         else pd.Series("", index=edges.index)
     )
     osm_path = osm_source & osm_role.eq("path")
+    osm_campus_path = osm_source & osm_role.eq("campus_path")
+    campus_parallel_bike = (
+        edges["campus_parallel_bike"].fillna(False).astype(bool)
+        if "campus_parallel_bike" in edges.columns
+        else pd.Series(False, index=edges.index)
+    )
     osm_access = osm_source & osm_role.eq("access")
     osm_reviewed_street = osm_source & osm_role.eq("reviewed_street")
 
@@ -404,6 +412,24 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
             "paths": {
                 "segments": int(osm_path.sum()),
                 "miles": round(float(miles[osm_path].sum()), 1),
+            },
+            "campus_walkways": {
+                "segments": int(osm_campus_path.sum()),
+                "miles": round(float(miles[osm_campus_path].sum()), 1),
+                "rating": 1,
+                "scope": "academic core",
+                "boundary_source": params.get(
+                    "osm.academic_core_boundary_source", ""
+                ),
+                "parallel_bike_segments": int(
+                    (osm_campus_path & campus_parallel_bike).sum()
+                ),
+                "parallel_bike_miles": round(float(
+                    miles[osm_campus_path & campus_parallel_bike].sum()
+                ), 1),
+                "campus_relation_id": int(
+                    params.get("osm.campus_relation_id", 4815526)
+                ),
             },
             "access_roads": {
                 "segments": int(osm_access.sum()),

@@ -1,287 +1,408 @@
 /**
- * Route planning.
+ * Calmroute route planner.
  *
- * The interesting screen here is the failure one. Most routers, asked for a
- * comfortable route that does not exist, quietly hand back a compromised one
- * and let the rider discover the arterial themselves. This says so, names the
- * limitation, and offers the best available compromise as a separate,
- * explicitly-labelled choice.
- *
- * The same principle governs the ordinary screen. The default route trades some
- * comfort for distance, so it can put a rider on a busy road — which it states,
- * in miles, and then offers the quieter alternative with its price attached. How
- * hard to try is a slider rather than a checkbox, because it is a preference.
+ * This keeps the supplied Field Notebook reference's information architecture
+ * while using the real Lexington graph: search first, compare three actual
+ * route preferences, then inspect stress along the selected ride.
  */
 
 import {
-  LTS, QUIETEST_ROUTE_LEVEL, ROUTE_LEVELS,
-} from '../config.js?v=20260731-field-notebook';
+  FAC_PUBLIC, LTS,
+} from '../config.js?v=20260731-solid-lines';
 import { escapeHtml, miles as fmtMiles, minutes } from '../lib/format.js';
 
-const POINT_LABEL = { from: 'Start', to: 'Destination' };
+const POINT = {
+  from: { letter: 'A', label: 'Start' },
+  to: { letter: 'B', label: 'Destination' },
+};
 
-export function render(state, stats) {
-  const row = (which) => {
-    const p = state[which];
-    const set = !!p;
-    const search = state.locationSearch?.[which] || {};
-    const query = search.query ?? p?.name ?? '';
-    const pending = search.status === 'pending';
-    const matches = (search.results || []).map((location, index) => `
-      <button type="button" class="location-result"
-              data-location-result data-which="${which}" data-index="${index}">
-        ${escapeHtml(location.name)}
-      </button>`).join('');
-    return `
-      <section class="location-group${set ? ' set' : ''}"
-               aria-labelledby="location-label-${which}">
-        <form class="location-row" data-location-form="${which}">
-          <span class="pin ${which}" aria-hidden="true"></span>
-          <label class="location-field" for="location-${which}">
-            <b id="location-label-${which}">${POINT_LABEL[which]}</b>
-            <input id="location-${which}" type="search" autocomplete="street-address"
-                   enterkeyhint="search" data-location-input="${which}"
-                   value="${escapeHtml(query)}"
-                   placeholder="Address or place in Lexington">
-          </label>
-          <button class="btn location-submit" type="submit"${pending ? ' disabled' : ''}>
-            ${pending ? 'Searching…' : 'Search'}
-          </button>
-        </form>
-        <div class="location-actions">
-          <button type="button" class="linklike" data-point="${which}"
-                  aria-pressed="${state.picking === which}">
-            ${state.picking === which ? 'Tap the map…' : 'Pick on map'}
-          </button>
-          ${set ? `<button type="button" class="linklike" data-clear="${which}">Clear</button>` : ''}
-          ${set ? `<span>${escapeHtml(p.name || 'Map pin selected')}</span>` : ''}
-        </div>
-        ${search.message ? `<p class="location-status ${search.status === 'error' ? 'error' : ''}"
-             role="status">${escapeHtml(search.message)}</p>` : ''}
-        ${matches ? `<div class="location-results"
-          aria-label="${POINT_LABEL[which]} location matches">${matches}</div>` : ''}
-      </section>`;
-  };
+const PRESETS = {
+  calmest: { label: 'Calmest', slider: 0 },
+  balanced: { label: 'Balanced', slider: 50 },
+  fastest: { label: 'Fastest', slider: 100 },
+};
+
+export function render(state, stats, mapState) {
+  const screen = state.screen || 'explore';
+  const content = screen === 'detail' && selected(state)
+    ? detail(state)
+    : screen === 'results'
+      ? results(state, mapState)
+      : explore(state, stats, mapState);
 
   return `
-    <p class="tech">Search for two locations, or pick them on the map. The route
-      balances comfort against distance — it will go a bit further to avoid a
-      busy road, but not three times as far.</p>
-
-    <div class="points">
-      ${row('from')}
-      ${row('to')}
-    </div>
-    <p class="tech geocoder-note">Address searches are sent to
-      <a href="https://www.openstreetmap.org/" target="_blank" rel="noopener">OpenStreetMap</a>
-      only when you press Search. Search powered by
-      <a href="https://nominatim.openstreetmap.org/" target="_blank"
-         rel="noopener">Nominatim</a> under its
-      <a href="https://operations.osmfoundation.org/policies/nominatim/"
-         target="_blank" rel="noopener">usage policy</a>.</p>
-
-    <div class="share-actions">
-      <button class="btn" data-route="swap"${state.from && state.to ? '' : ' disabled'}>Swap</button>
-      <button class="btn" data-route="clear"${state.from || state.to ? '' : ' disabled'}>Clear both</button>
-    </div>
-
-    ${levelSlider(state.level)}
-
-    <div id="route-result">${state.result ? result(state) : ''}</div>
-    ${state.result && state.result.kind === 'ok' ? coverageNote(stats) : ''}`;
+    <div class="route-stack">
+      ${screen === 'detail' ? '' : searchBox(state)}
+      ${content}
+    </div>`;
 }
 
-/**
- * The comfort/distance trade, as a slider.
- *
- * A checkbox could only say "quiet or nothing", which is one honest answer and
- * three missing ones. The endpoints are labelled and the current notch is spelt
- * out in text below, because a bare slider position tells a rider nothing about
- * what it will do — and `aria-valuetext` gives a screen reader the same words
- * rather than reading out "2".
- */
-function levelSlider(level) {
-  const current = ROUTE_LEVELS[level] || ROUTE_LEVELS[0];
-  const ends = ROUTE_LEVELS.filter((l) => l.tick);
-  // The quietest preference is the comfortable end, so it wears the sage tag;
-  // everything below can put a rider on a busy road, so it wears the terracotta.
-  const tagClass = level >= QUIETEST_ROUTE_LEVEL ? 'tag-accent-2' : 'tag-accent';
+function searchBox(state) {
   return `
-    <div class="box stress-pref">
-      <div class="pref-head">
-        <label class="eyebrow" for="stress-level" style="margin:0">Comfort vs. distance</label>
+    <section class="box route-search-box" aria-label="Route locations">
+      ${locationRow(state, 'from')}
+      ${locationRow(state, 'to')}
+      <div class="route-search-actions">
+        <button class="btn ghost" type="button" data-point="from"
+                aria-pressed="${state.picking === 'from'}">
+          ${state.picking === 'from' ? 'Tap map for A…' : 'Pick A on map'}
+        </button>
+        <button class="btn ghost" type="button" data-point="to"
+                aria-pressed="${state.picking === 'to'}">
+          ${state.picking === 'to' ? 'Tap map for B…' : 'Pick B on map'}
+        </button>
         <span class="grow"></span>
-        <span class="tag ${tagClass}">${escapeHtml(current.label)}</span>
+        ${state.from || state.to
+          ? '<button class="btn ghost" type="button" data-route-action="clear">Clear</button>'
+          : ''}
       </div>
-      <input type="range" class="themed" id="stress-level" data-route="level"
-             min="0" max="${QUIETEST_ROUTE_LEVEL}" step="1" value="${level}"
-             aria-describedby="stress-hint"
-             aria-valuetext="${escapeHtml(current.label)}">
-      <div class="ticks" aria-hidden="true">
-        ${ends.map((l) => `<span>${escapeHtml(l.tick)}</span>`).join('')}
-      </div>
-      <p class="tech" id="stress-hint" style="margin-top:8px">${escapeHtml(current.hint)}</p>
+      ${state.screen === 'explore' ? `
+        <button class="btn primary route-find" type="button"
+                data-route-action="find"
+                ${state.from && state.to ? '' : 'disabled'}>
+          ${routeIcon()} Find calm routes
+        </button>` : ''}
+    </section>
+    <p class="route-geocoder-note">
+      Press Enter or use the search button to resolve an address through
+      <a href="https://nominatim.openstreetmap.org/" target="_blank"
+         rel="noopener">OpenStreetMap Nominatim</a>.
+    </p>`;
+}
+
+function locationRow(state, which) {
+  const point = state[which];
+  const search = state.locationSearch?.[which] || {};
+  const query = search.query ?? point?.name ?? '';
+  const pending = search.status === 'pending';
+  const matches = (search.results || []).map((location, index) => `
+    <button type="button" class="location-result route-location-result"
+            data-location-result data-which="${which}" data-index="${index}">
+      ${escapeHtml(location.name)}
+    </button>`).join('');
+
+  return `
+    <div class="route-location">
+      <form class="ab-row" data-location-form="${which}">
+        <span class="route-pin ${which}" aria-hidden="true">${POINT[which].letter}</span>
+        <label class="visually-hidden" for="location-${which}">${POINT[which].label}</label>
+        <input class="input" id="location-${which}" type="search"
+               autocomplete="street-address" enterkeyhint="search"
+               data-location-input="${which}" value="${escapeHtml(query)}"
+               placeholder="${POINT[which].label} address or place">
+        <button class="btn btn-icon route-search-submit" type="submit"
+                aria-label="Search for ${POINT[which].label.toLowerCase()}"
+                ${pending ? 'disabled' : ''}>${pending ? '…' : searchIcon()}</button>
+        ${which === 'to' ? `
+          <button class="btn btn-icon" type="button" data-route-action="swap"
+                  aria-label="Swap start and destination"
+                  ${state.from && state.to ? '' : 'disabled'}>${swapIcon()}</button>` : ''}
+      </form>
+      ${search.message ? `<p class="location-status ${
+        search.status === 'error' ? 'error' : ''}" role="status">${
+        escapeHtml(search.message)}</p>` : ''}
+      ${matches ? `<div class="location-results"
+        aria-label="${POINT[which].label} location matches">${matches}</div>` : ''}
     </div>`;
 }
 
-/** The one caveat a rider needs when a route looks like a detour. */
-function coverageNote(stats) {
-  const pct = stats?.coverage?.missing_pct;
-  if (!pct) return '';
-  return `<p class="tech">If this looks like a detour: the city's street file is
-    missing about ${pct}% of named streets, and a street that is not in the data
-    cannot be routed over.</p>`;
+function explore(state, stats, mapState) {
+  return `
+    <p class="route-intro">
+      Plan a practical ride that trades a little distance for calmer streets.
+      Every route keeps each segment's stress colour so the hard parts are
+      visible before you leave.
+    </p>
+    ${routeLegend(stats, mapState)}
+    <p class="route-footnote">Tap any street to see why it received its rating.</p>
+    ${appNav()}`;
 }
 
-/** Verdict for a completed search. */
-function result(state) {
-  const r = state.result;
-  if (r.kind === 'pending') {
-    return '<p class="tech">Working…</p>';
+function results(state, mapState) {
+  if (state.result?.kind === 'pending') {
+    return `<div class="box route-working" role="status">
+      <span class="spinner" aria-hidden="true"></span> Finding calm routes…
+    </div>`;
+  }
+  if (state.result?.kind === 'error') {
+    return `<div class="verdict bad"><b>The routes could not be calculated</b>
+      <span>Reload the page and try again.</span></div>${appNav()}`;
+  }
+  if (!state.candidates?.length) {
+    return `<div class="verdict bad"><b>No route found</b>
+      <span>These points are not connected on the bikeable network. One may be
+      on a street the map data does not contain.</span></div>${appNav()}`;
   }
 
-  if (r.kind === 'none') {
-    return `<div class="verdict bad">
-        <b>No route found</b>
-        <span>These two points are not connected on the bikeable network at all.
-          One of them may be on a street the map does not cover.</span>
-      </div>`;
-  }
-
-  if (r.kind === 'error') {
-    return `<div class="verdict bad">
-        <b>The route could not be drawn</b>
-        <span>One of the map layers did not finish loading. Reload the page and
-          try again.</span>
-      </div>`;
-  }
-
-  if (r.kind === 'blocked') {
-    return `
-      <div class="verdict bad">
-        <b>No route at this comfort setting</b>
-        <span>The lower-stress streets between these points do not connect
-          continuously. You can review the best available route below, with
-          stressful portions clearly marked.</span>
-      </div>
-      ${r.fallback ? `
-        <p class="tech">The best available route is
-          <b>${fmtMiles(r.fallback.miles)}</b> and uses
-          <b>${fmtMiles(r.fallback.stressMiles)}</b> of
-          ${escapeHtml((LTS[r.fallback.worstLts] || LTS[4]).short.toLowerCase())}
-          road. It is drawn on the map, with the stressful part in red.</p>
-        <div class="share-actions">
-          <button class="btn" data-route="accept">Show it anyway</button>
-        </div>` : ''}`;
-  }
-
-  const comfortable = r.stressMiles < 0.01;
+  const chosen = selected(state) || state.candidates[0];
   return `
-    <div class="verdict ${comfortable ? 'good' : 'warn'}">
-      <b>${fmtMiles(r.miles)} · about ${minutes(r.miles)} min</b>
-      <span>${r.detour ? `${r.detour.toFixed(1)}× longer than the direct route`
-                       : 'Direct route'}</span>
+    ${preference(state, chosen)}
+    <div class="route-list-head">
+      <span class="eyebrow">${state.candidates.length} ${
+        state.candidates.length === 1 ? 'route' : 'routes'}</span>
+      <span class="grow"></span>
+      <span>${escapeHtml(shortPoint(state.from))} → ${
+        escapeHtml(shortPoint(state.to))}</span>
     </div>
-    <p class="tech">${comfortable
-      ? '✓ Comfortable the whole way.'
-      : `<b>${fmtMiles(r.stressMiles)}</b> of this is on
-         ${escapeHtml((LTS[r.worstLts] || LTS[4]).short.toLowerCase())} road,
-         drawn in red.`}</p>
-    ${r.quieter ? quieterOffer(r, r.quieter) : ''}`;
+    <div class="route-cards">
+      ${state.candidates.map((candidate) =>
+        routeCard(candidate, candidate.key === chosen.key)).join('')}
+    </div>
+    <p class="route-time-note">Ride times are distance estimates at 10 mph.
+      They do not account for hills, signals, stops, or turn delay.</p>
+    ${stressChips(mapState)}
+    ${appNav()}`;
 }
 
-/**
- * The escape hatch from a busy route.
- *
- * The numbers are on the button's own description because "want something
- * quieter?" without a price is a question no one can answer. The alternative has
- * already been searched for, so this never offers a route that turns out not to
- * exist.
- */
-function quieterOffer(current, alt) {
-  const extra = alt.miles - current.miles;
-  const cost = extra > 0.05
-    ? `${fmtMiles(extra)} further (${fmtMiles(alt.miles)} total)`
-    : `no further (${fmtMiles(alt.miles)} total)`;
+function preference(state, chosen) {
+  const fastest = state.candidates.find((candidate) => candidate.key === 'fastest')
+    || state.candidates[state.candidates.length - 1];
+  const extraMinutes = Math.max(0, minutes(chosen.miles) - minutes(fastest.miles));
+  const extraMiles = Math.max(0, chosen.miles - fastest.miles);
+  const stressChange = fastest.stressMiles - chosen.stressMiles;
+  const comparison = chosen.key === 'fastest'
+    ? `${fmtMiles(chosen.severeMiles)} of this route is LTS 4.`
+    : `Costs <b>+${extraMinutes} min</b> and <b>+${
+      fmtMiles(extraMiles)}</b> — ${
+      stressChange > 0.01
+        ? `cuts high-stress riding by <b>${fmtMiles(stressChange)}</b>.`
+        : `uses <b>${fmtMiles(chosen.stressMiles)}</b> of LTS 3–4 streets.`
+    }`;
 
   return `
-    <div class="alt">
-      <b>There is a quieter way.</b>
-      <span>${cost}, ${quieterGain(current, alt)}.</span>
-      <div class="share-actions">
-        <button class="btn primary" data-route="quieter">Use the quieter route</button>
+    <div class="box route-preference">
+      <div class="pref-head">
+        <span class="eyebrow">Comfort vs. speed</span>
+        <span class="grow"></span>
+        <span class="tag ${chosen.worstLts >= 4 ? 'tag-accent' : 'tag-accent-2'}">
+          ${escapeHtml(PRESETS[chosen.key]?.label || chosen.label)}
+        </span>
+      </div>
+      <input class="range" type="range" min="0" max="100" step="1"
+             value="${PRESETS[chosen.key]?.slider ?? 50}"
+             data-route-slider aria-label="Comfort versus speed"
+             aria-valuetext="${escapeHtml(PRESETS[chosen.key]?.label || chosen.label)}">
+      <div class="range-ends"><span>Calmest</span><span>Fastest</span></div>
+      <p>${comparison}</p>
+    </div>`;
+}
+
+function routeCard(candidate, active) {
+  const hardPct = candidate.miles
+    ? Math.round((candidate.stressMiles / candidate.miles) * 100) : 0;
+  const tag = candidate.severeMiles > 0.01
+    ? `${fmtMiles(candidate.severeMiles)} on LTS 4`
+    : candidate.worstLts <= 2 ? 'No busy roads' : 'No LTS 4';
+  return `
+    <article class="rcard" aria-current="${active}">
+      <button class="rcard-pick" type="button" data-route-preset="${candidate.key}">
+        <span class="rcard-top">
+          <span class="rcard-name">${escapeHtml(candidate.label)}</span>
+          <span class="tag ${candidate.severeMiles > 0.01 ? 'tag-accent' : 'tag-accent-2'}">
+            ${tag}
+          </span>
+          <span class="rcard-num"><b>${minutes(candidate.miles)} min</b><br>${
+            fmtMiles(candidate.miles)}</span>
+        </span>
+        ${stressBand(candidate)}
+        <span class="rcard-meta">${fmtMiles(candidate.stressMiles)} on LTS 3–4
+          (${hardPct}%)${candidate.extraMinutes
+            ? ` · +${candidate.extraMinutes} min` : ''}</span>
+      </button>
+      ${active ? `<button class="btn ghost route-detail-button" type="button"
+          data-route-action="detail">See stress breakdown →</button>` : ''}
+    </article>`;
+}
+
+function stressBand(candidate) {
+  const segments = candidate.segments?.length
+    ? candidate.segments
+    : [{ lts: candidate.worstLts, miles: candidate.miles }];
+  return `<span class="band" aria-hidden="true">${segments.map((segment) =>
+    `<i style="flex:${Math.max(segment.miles, 0.001)};background:${
+      (LTS[segment.lts] || LTS[0]).color}"></i>`).join('')}</span>`;
+}
+
+function detail(state) {
+  const candidate = selected(state);
+  const hardPct = candidate.miles
+    ? Math.round((candidate.stressMiles / candidate.miles) * 100) : 0;
+  const worst = [...(candidate.segments || [])].sort(
+    (a, b) => b.lts - a.lts || b.miles - a.miles,
+  )[0];
+  const fastest = state.candidates.find((route) => route.key === 'fastest');
+  const detourMinutes = fastest
+    ? Math.max(0, minutes(candidate.miles) - minutes(fastest.miles)) : 0;
+  const detourMiles = fastest ? Math.max(0, candidate.miles - fastest.miles) : 0;
+
+  return `
+    <div class="route-detail">
+      <div class="route-detail-head">
+        <button class="btn" type="button" data-route-action="compare">← Compare</button>
+        <span class="grow"></span>
+        <span class="tag ${candidate.worstLts >= 4 ? 'tag-accent' : 'tag-accent-2'}">
+          ${escapeHtml(candidate.label)}
+        </span>
+      </div>
+      <div>
+        <h2>${minutes(candidate.miles)} min · ${fmtMiles(candidate.miles)}</h2>
+        <p>${escapeHtml(shortPoint(state.from))} → ${
+          escapeHtml(shortPoint(state.to))}</p>
+        <p class="route-time-note">Time estimated at 10 mph; hills, signals,
+          stops, and turn delay are not modeled.</p>
+      </div>
+      <div class="box">${stressProfile(candidate)}</div>
+      <dl class="kv route-kv">
+        <dt>High-stress riding (LTS 3–4)</dt><dd>${
+          fmtMiles(candidate.stressMiles)} · ${hardPct}%</dd>
+        <dt>Worst stretch</dt><dd>${escapeHtml(worst?.name || 'Unknown')} · LTS ${
+          worst?.lts ?? candidate.worstLts}</dd>
+        <dt>Route sections</dt><dd>${candidate.segments?.length || 1}</dd>
+        <dt>Detour vs. fastest</dt><dd>${candidate.key === 'fastest'
+          ? '—' : `+${detourMinutes} min · +${fmtMiles(detourMiles)}`}</dd>
+      </dl>
+      <div>
+        <div class="eyebrow route-legs-title">Leg by leg</div>
+        <div class="steps">
+          ${(candidate.segments || []).map(routeStep).join('')}
+        </div>
+      </div>
+      ${appNav()}
+    </div>`;
+}
+
+function stressProfile(candidate) {
+  return `
+    <div class="prof">
+      ${(candidate.segments || []).map((segment) => `
+        <div class="prof-col" style="flex:${Math.max(segment.miles, 0.001)}"
+             title="${escapeHtml(segment.name)} · LTS ${segment.lts}">
+          <i style="height:${Math.max(18, segment.lts * 25)}%;background:${
+            (LTS[segment.lts] || LTS[0]).color}"></i>
+        </div>`).join('')}
+    </div>
+    <div class="prof-axis"><span>0 mi · A</span><span>stress along the ride</span>
+      <span>${fmtMiles(candidate.miles)} · B</span></div>`;
+}
+
+function routeStep(segment) {
+  const detail = [
+    FAC_PUBLIC[segment.fac] || 'Street',
+    segment.speed != null ? `${segment.speed} mph` : null,
+    segment.lanes > 2 ? `${segment.lanes} lanes` : null,
+  ].filter(Boolean).join(' · ');
+  return `
+    <div class="step">
+      <span class="bar" style="background:${
+        (LTS[segment.lts] || LTS[0]).color}"></span>
+      <span><span class="st">${escapeHtml(segment.name)}</span><br>
+        <span class="nt">${escapeHtml(detail)}</span></span>
+      <span class="mi">${fmtMiles(segment.miles)}</span>
+    </div>`;
+}
+
+function routeLegend(stats, mapState) {
+  const totals = new Map((stats?.by_lts || []).map((row) => [row.lts, row.miles]));
+  return `
+    <div class="box route-legend-box">
+      <div class="eyebrow">Traffic stress · mapped streets</div>
+      <div class="route-legend" role="group" aria-label="Filter by traffic stress">
+        ${[1, 2, 3, 4].map((lts) => {
+          const info = LTS[lts];
+          const on = mapState?.lts?.has(lts) !== false;
+          return `<button type="button" class="route-lg-item" data-route-lts="${lts}"
+              aria-pressed="${on}">
+            <span class="sw" style="background:${info.color}"></span>
+            <span class="nm">${escapeHtml(info.short)}</span>
+            <span class="desc">${escapeHtml(info.detail)}</span>
+            <span class="mi">${totals.has(lts)
+              ? `${totals.get(lts).toFixed(0)} mi` : '—'}</span>
+          </button>`;
+        }).join('')}
       </div>
     </div>`;
 }
 
-/**
- * What the alternative actually buys, in the terms in which it is better.
- *
- * The interesting case is a swap of arterial for collector: total stress miles
- * go *up* while the ride genuinely improves. Saying "cuts the busy part to 2.96"
- * against a current 2.72 would read as a typo, so when the gain is arterial
- * mileage the sentence has to be about arterial mileage.
- */
-function quieterGain(current, alt) {
-  if (alt.stressMiles < 0.01) return 'and stays off busy roads entirely';
-
-  const droppedArterial = alt.severeMiles < current.severeMiles - 0.01;
-  if (droppedArterial && alt.severeMiles < 0.01) {
-    return `and keeps you off ${fmtMiles(current.severeMiles)} of
-      ${escapeHtml(LTS[4].short.toLowerCase())} road`;
-  }
-  if (droppedArterial) {
-    return `and cuts the ${escapeHtml(LTS[4].short.toLowerCase())} part from
-      ${fmtMiles(current.severeMiles)} to ${fmtMiles(alt.severeMiles)}`;
-  }
-  return `and cuts the busy part from ${fmtMiles(current.stressMiles)} to
-    ${fmtMiles(alt.stressMiles)}`;
+function stressChips(mapState) {
+  return `
+    <div class="route-stress-chips" aria-label="Filter map stress ratings">
+      ${[1, 2, 3, 4].map((lts) => `
+        <button class="lg-chip" type="button" data-route-lts="${lts}"
+                aria-pressed="${mapState?.lts?.has(lts) !== false}">
+          <span class="sw" style="background:${LTS[lts].color}"></span>
+          LTS ${lts} ${escapeHtml(LTS[lts].short)}
+        </button>`).join('')}
+    </div>`;
 }
 
-/**
- * Which control to put focus back on after the next re-render.
- *
- * Every interaction rebuilds the whole panel body, which discards the element
- * the rider was on. That was survivable when every control was a button that
- * ends an interaction, but a slider is adjusted repeatedly: one arrow-key nudge
- * dropped focus to the document, and the second nudge went nowhere. So remember
- * the control by selector — the new DOM has a different element for it — and
- * restore focus once the search has settled.
- */
+function appNav() {
+  return `
+    <nav class="route-app-nav" aria-label="More map tools">
+      <button class="btn ghost" data-nav="legend">All ratings</button>
+      <button class="btn ghost" data-nav="browse">Browse streets</button>
+      <button class="btn ghost" data-nav="style">Map style</button>
+      <button class="btn ghost" data-nav="methodology">Methodology</button>
+      <button class="btn ghost" data-nav="share">Share</button>
+    </nav>`;
+}
+
+function selected(state) {
+  return state.candidates?.find((candidate) => candidate.key === state.selected)
+    || null;
+}
+
+function shortPoint(point) {
+  const name = point?.name || 'Map point';
+  return name.split(',')[0].trim();
+}
+
+function routeIcon() {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="6" cy="18" r="2.5"></circle><circle cx="18" cy="6" r="2.5"></circle>
+    <path d="M8.5 18H14a4 4 0 0 0 0-8H9"></path></svg>`;
+}
+
+function searchIcon() {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="10.5" cy="10.5" r="5.5"></circle><path d="m15 15 4 4"></path></svg>`;
+}
+
+function swapIcon() {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M8 4 5 7l3 3M5 7h10M16 20l3-3-3-3M19 17H9"></path></svg>`;
+}
+
 let refocus = null;
 
 const selectorFor = (el) => {
-  const d = el && el.dataset;
-  if (!d) return null;
-  if (d.route) return `[data-route="${d.route}"]`;
-  if (d.point) return `[data-point="${d.point}"]`;
-  if (d.locationInput) return `[data-location-input="${d.locationInput}"]`;
+  const data = el?.dataset;
+  if (!data) return null;
+  if (data.routeAction) return `[data-route-action="${data.routeAction}"]`;
+  if (data.routePreset) return `[data-route-preset="${data.routePreset}"]`;
+  if (data.routeSlider !== undefined) return '[data-route-slider]';
+  if (data.point) return `[data-point="${data.point}"]`;
+  if (data.locationInput) return `[data-location-input="${data.locationInput}"]`;
   return null;
 };
 
 export function mount(root, handlers, state) {
   const remember = () => { refocus = selectorFor(document.activeElement); };
 
-  root.querySelectorAll('[data-point]').forEach((btn) => {
-    btn.addEventListener('click', () => {
+  root.querySelectorAll('[data-point]').forEach((button) => {
+    button.addEventListener('click', () => {
       remember();
-      handlers.onPick(btn.dataset.point);
+      handlers.onPick?.(button.dataset.point);
     });
-  });
-
-  root.querySelectorAll('[data-clear]').forEach((btn) => {
-    btn.addEventListener('click', () => handlers.onClear(btn.dataset.clear));
   });
 
   root.querySelectorAll('[data-location-input]').forEach((input) => {
-    input.addEventListener('input', () => {
-      handlers.onQuery?.(input.dataset.locationInput, input.value);
-    });
+    input.addEventListener('input', () =>
+      handlers.onQuery?.(input.dataset.locationInput, input.value));
   });
 
   root.querySelectorAll('[data-location-form]').forEach((form) => {
-    form.addEventListener('submit', (ev) => {
-      ev.preventDefault();
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
       remember();
       const which = form.dataset.locationForm;
       const input = form.querySelector(`[data-location-input="${which}"]`);
@@ -289,41 +410,57 @@ export function mount(root, handlers, state) {
     });
   });
 
-  root.querySelectorAll('[data-location-result]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const which = btn.dataset.which;
+  root.querySelectorAll('[data-location-result]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const which = button.dataset.which;
       refocus = `[data-location-input="${which}"]`;
-      const location = state.locationSearch?.[which]?.results?.[Number(btn.dataset.index)];
+      const location = state.locationSearch?.[which]?.results?.[
+        Number(button.dataset.index)
+      ];
       if (location) handlers.onChooseLocation?.(which, location);
     });
   });
 
-  const act = {
+  const action = {
+    find: handlers.onFind,
     swap: handlers.onSwap,
     clear: handlers.onClearBoth,
-    accept: handlers.onAccept,
-    quieter: handlers.onQuieter,
+    detail: handlers.onDetail,
+    compare: handlers.onCompare,
   };
-  root.querySelectorAll('[data-route]').forEach((el) => {
-    if (el.dataset.route === 'level') {
-      // `change`, not `input`: dragging across four notches on the way to the
-      // one you want would otherwise fire three searches and three re-renders,
-      // rebuilding the slider out from under the pointer mid-drag.
-      el.addEventListener('change', () => {
-        remember();
-        handlers.onLevel(Number(el.value));
-      });
-    } else if (act[el.dataset.route]) {
-      el.addEventListener('click', () => { remember(); act[el.dataset.route](); });
-    }
+  root.querySelectorAll('[data-route-action]').forEach((button) => {
+    const handler = action[button.dataset.routeAction];
+    if (handler) button.addEventListener('click', () => {
+      remember();
+      handler();
+    });
   });
 
-  root.querySelectorAll('[data-nav]').forEach((btn) => {
-    btn.addEventListener('click', () => handlers.onNav?.(btn.dataset.nav));
+  root.querySelectorAll('[data-route-preset]').forEach((button) => {
+    button.addEventListener('click', () => {
+      refocus = `[data-route-preset="${button.dataset.routePreset}"]`;
+      handlers.onPreset?.(button.dataset.routePreset);
+    });
   });
 
-  // Wait for the settled render: restoring focus on the "Working…" pass would
-  // consume the selector one render too early and lose it again straight after.
+  root.querySelector('[data-route-slider]')?.addEventListener('change', (event) => {
+    refocus = '[data-route-slider]';
+    const value = Number(event.currentTarget.value);
+    handlers.onPreset?.(value < 34 ? 'calmest' : value < 70 ? 'balanced' : 'fastest');
+  });
+
+  root.querySelectorAll('[data-route-lts]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const lts = Number(button.dataset.routeLts);
+      const on = button.getAttribute('aria-pressed') !== 'true';
+      handlers.onLts?.(lts, on);
+    });
+  });
+
+  root.querySelectorAll('[data-nav]').forEach((button) => {
+    button.addEventListener('click', () => handlers.onNav?.(button.dataset.nav));
+  });
+
   const locationPending = Object.values(state?.locationSearch || {})
     .some((search) => search.status === 'pending');
   if (refocus && state?.result?.kind !== 'pending' && !locationPending) {

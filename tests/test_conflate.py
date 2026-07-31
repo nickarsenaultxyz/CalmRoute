@@ -16,12 +16,15 @@ from shapely.geometry import LineString, MultiLineString
 
 from lexbike import params as params_mod
 from lexbike.conflate import (
+    _dedupe_connectors,
     _find_attachments,
+    _find_path_junctions,
     bearing_delta,
     conflate_on_road,
     line_bearing,
     local_bearing_delta,
 )
+from lexbike.pipeline import mark_campus_parallel_bike_infrastructure
 
 
 def test_bearing_of_cardinal_directions():
@@ -249,3 +252,102 @@ def test_nearby_distinct_junctions_are_not_thinned_by_along_path_distance():
 
     assert len(found) == 2
     assert [round(item[0]) for item in found] == [0, 100]
+
+
+def test_campus_endpoint_only_attachment_ignores_parallel_street_blocks():
+    """A campus sidewalk joins streets at entrances, not once per block."""
+    path = LineString([(0, 0), (0, 50), (0, 100)])
+    targets = gpd.GeoDataFrame(
+        geometry=[
+            LineString([(-5, 0), (5, 0)]),
+            LineString([(-5, 50), (5, 50)]),
+            LineString([(-5, 100), (5, 100)]),
+        ],
+        crs=32616,
+    )
+    found = _find_attachments(
+        path,
+        targets,
+        STRtree(targets.geometry.values),
+        max_m=25,
+        spacing_m=120,
+        merge_m=0.75,
+        endpoints_only=True,
+    )
+    assert [round(item[0]) for item in found] == [0, 100]
+
+
+def test_path_junctions_use_tight_radius_away_from_endpoints():
+    path = LineString([(0, 0), (0, 50), (0, 100)])
+    others = gpd.GeoDataFrame(
+        geometry=[
+            # A real endpoint landing mismatch.
+            LineString([(7, -10), (7, 10)]),
+            # A merely parallel path near the interior vertex.
+            LineString([(7, 40), (7, 60)]),
+        ],
+        crs=32616,
+    )
+    off = gpd.GeoDataFrame(
+        geometry=[path, *others.geometry],
+        crs=32616,
+    )
+    found = _find_path_junctions(
+        path,
+        0,
+        off,
+        STRtree(off.geometry.values),
+        endpoint_max_m=8,
+        interior_max_m=0.75,
+    )
+    targets = {item[2] for item in found}
+    assert -2 in targets
+    assert -3 not in targets
+
+
+def test_identical_connectors_are_emitted_once():
+    geometry = LineString([(0, 0), (5, 0)])
+    rows = [
+        {"geometry": geometry, "path_row": 1},
+        {"geometry": LineString(reversed(geometry.coords)), "path_row": 2},
+    ]
+    assert len(_dedupe_connectors(rows)) == 1
+
+
+def test_street_attachment_near_endpoint_snaps_to_endpoint():
+    path = LineString([(0, 0), (0, 10)])
+    target = LineString([(0.5, 0.2), (10, 0.2)])
+    targets = gpd.GeoDataFrame(geometry=[target], crs=32616)
+    found = _find_attachments(
+        path,
+        targets,
+        STRtree(targets.geometry.values),
+        max_m=25,
+        spacing_m=120,
+        merge_m=0.75,
+    )
+    assert tuple(found[0][1].coords[0]) == tuple(target.coords[0])
+
+
+def test_only_parallel_nearby_campus_path_gets_road_preference():
+    frame = gpd.GeoDataFrame(
+        {
+            "kind": ["street", "facility", "facility", "facility"],
+            "fac": ["lane", "path", "path", "path"],
+            "osm_role": ["", "campus_path", "campus_path", "campus_path"],
+            "geometry": [
+                LineString([(0, 0), (100, 0)]),
+                LineString([(0, 10), (100, 10)]),       # nearby + parallel
+                LineString([(50, -50), (50, 50)]),      # nearby crossing
+                LineString([(0, 100), (100, 100)]),     # parallel but remote
+            ],
+        },
+        crs=32616,
+    )
+    marked = mark_campus_parallel_bike_infrastructure(
+        frame,
+        params_mod.load(),
+    )
+    assert marked["campus_parallel_bike"].tolist() == [
+        False, True, False, False,
+    ]

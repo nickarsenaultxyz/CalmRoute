@@ -20,6 +20,7 @@ from pathlib import Path
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from shapely import STRtree
 
 from . import conflate, council, export, io, network, osm as osm_mod
 from . import lts as lts_mod
@@ -130,10 +131,10 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
 
     streets = conflate.conflate_on_road(streets, existing, params)
 
-    # Supplementary OSM paths, explicitly bicycle-authorized service roads and
-    # narrowly reviewed missing streets, if enabled. They join the same geometry
-    # attachment pipeline rather than a parallel graph; street exceptions
-    # receive no bike-facility credit below.
+    # Supplementary OSM paths, UK campus walkways, explicitly bicycle-authorized
+    # service roads and narrowly reviewed missing streets, if enabled. They join
+    # the same geometry attachment pipeline rather than a parallel graph; street
+    # exceptions receive no bike-facility credit below.
     off_road_input = existing
     osm_paths = osm_mod.fetch(params)
     if osm_paths is not None:
@@ -155,6 +156,7 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
 
     log.info("--- stage 4/5: graph, islands, barriers ---")
     edges = assemble_edges(rated, paths, connectors, params)
+    edges = mark_campus_parallel_bike_infrastructure(edges, params)
     summarize(edges, params)
 
     graph, node_ids, pairs = network.build_graph(edges, params)
@@ -234,14 +236,23 @@ def write_artifacts(
     export.write_json(
         {
             "nodes": coords,
+            "campus_parallel_bike_factor": float(
+                params["routing.campus_parallel_bike_factor"]
+            ),
             "edges": [
-                [int(u), int(v), int(i), round(float(m), 4), int(l)]
-                for u, v, i, m, l in zip(
+                [
+                    int(u), int(v), int(i), round(float(m), 6), int(l),
+                    int(campus),
+                ]
+                for u, v, i, m, l, campus in zip(
                     routable["u"], routable["v"], routable["id"],
                     routable["mi"], routable["lts"],
+                    routable["campus_parallel_bike"].fillna(False),
                 )
             ],
-            "edge_fields": ["u", "v", "id", "miles", "lts"],
+            "edge_fields": [
+                "u", "v", "id", "miles", "lts", "campus_parallel_bike",
+            ],
         },
         out_dir / "graph.json",
     )
@@ -534,6 +545,18 @@ def assemble_edges(streets, paths, connectors, params: Params):
 
     if len(connectors):
         c = connectors.copy()
+        # A sub-metre connector can collapse to one exported coordinate. The
+        # street was still split at its target above, so path and street already
+        # share that rounded graph node; emitting a self-edge would add no route
+        # choice and can create a zero-cost Dijkstra edge.
+        decimals = int(params["meta.coord_decimals"])
+        collapsed = c.geometry.map(
+            lambda geom: (
+                tuple(round(v, decimals) for v in geom.coords[0])
+                == tuple(round(v, decimals) for v in geom.coords[-1])
+            )
+        )
+        c = c[~collapsed].copy()
         c["kind"] = "connector"
         c["rdclass"] = 6
         c["lanes"] = 1
@@ -571,6 +594,75 @@ def assemble_edges(streets, paths, connectors, params: Params):
         int((out["kind"] == "street").sum()),
         int((out["kind"] == "facility").sum()),
         int((out["kind"] == "connector").sum()),
+    )
+    return out
+
+
+def mark_campus_parallel_bike_infrastructure(
+    edges: gpd.GeoDataFrame,
+    params: Params,
+) -> gpd.GeoDataFrame:
+    """Flag campus walkway pieces that parallel an on-road bike facility.
+
+    Proximity alone is insufficient: a campus path crossing a bike lane is a
+    useful connector, not a competing sidewalk. Require both sustained nearby
+    coverage and a similar local bearing. The browser applies its secondary
+    route cost only to the pieces flagged here.
+    """
+    out = edges.copy()
+    out["campus_parallel_bike"] = False
+
+    role = (
+        out["osm_role"].fillna("")
+        if "osm_role" in out.columns
+        else pd.Series("", index=out.index)
+    )
+    campus_indices = out.index[role.eq("campus_path")]
+    bike_indices = out.index[
+        out["kind"].eq("street")
+        & out["fac"].isin({"sharrow", "shoulder", "lane", "buffered", "protected"})
+    ]
+    if campus_indices.empty or bike_indices.empty:
+        return out
+
+    radius = float(params["routing.campus_bike_near_m"])
+    min_share = float(params["routing.campus_bike_min_parallel_share"])
+    max_delta = float(params["routing.campus_bike_parallel_degrees"])
+    work = io.to_working_crs(out, params)
+    bike_geoms = work.loc[bike_indices].geometry.to_numpy()
+    tree = STRtree(bike_geoms)
+
+    flagged = []
+    for edge_index in campus_indices:
+        path = work.at[edge_index, "geometry"]
+        if path.length <= 0:
+            continue
+        for candidate_position in tree.query(path.buffer(radius)):
+            street = bike_geoms[int(candidate_position)]
+            street_corridor = street.buffer(radius)
+            share = path.intersection(street_corridor).length / path.length
+            if share < min_share:
+                continue
+            delta = conflate.local_bearing_delta(
+                street,
+                path,
+                street_corridor,
+                path.buffer(radius),
+            )
+            if delta is not None and delta <= max_delta:
+                flagged.append(edge_index)
+                break
+
+    out.loc[flagged, "campus_parallel_bike"] = True
+    miles = (
+        float(work.loc[flagged].geometry.length.sum()) / 1609.344
+        if flagged else 0.0
+    )
+    log.info(
+        "routing preference: %d campus walkway pieces (%.1f mi) parallel "
+        "nearby on-road bike infrastructure",
+        len(flagged),
+        miles,
     )
     return out
 

@@ -321,6 +321,11 @@ min_recall = 0.90
 max_inflation = 1.45
 
 connector_max_m = 25.0         # 162 of 254 off-road endpoints connect at 25 m
+# Separate paths may be independently digitized a few metres apart at a real
+# junction. Keep this much tighter than the street reach: on a dense campus,
+# using 25 m between paths manufactures links across lawns and between parallel
+# sidewalks.
+path_connector_max_m = 8.0
 
 # Minimum gap between interior attachment points along one path. The closest
 # eligible target at each endpoint is always retained, even inside this window,
@@ -378,14 +383,16 @@ barrier_min_island_segments = 3
 #  Enabled for the public build. A failed or out-of-range OSM fetch stops the
 #  deployment, so the live map cannot silently fall back to LFUCG-only data.
 #
-#  The Fayette County OSM relation currently has 70.0 mi of cycleway and
-#  bicycle=designated path. After de-duplication, 21.0 mi is not already in the
-#  LFUCG layer -- campus paths, apartment connectors and park links.
+#  The Fayette County query supplies cycleways and bicycle-designated paths.
+#  A reviewed four-street polygon supplies non-private walkways only within
+#  UK's academic core; UK permits bicycles there even when OSM has no
+#  bicycle-specific tag.
 #
 #  This is importable where OSM *streets* are not. A path separated from traffic
 #  is LTS 1 by definition, which is already how LFUCG paths are rated, so
-#  nothing has to be inferred and nothing is conflated onto a centreline. OSM's
-#  261 mi of untagged paved footway is excluded: almost all of it is sidewalk.
+#  nothing has to be inferred and nothing is conflated onto a centreline.
+#  Untagged footways outside the academic core remain excluded: almost all are
+#  ordinary sidewalks and have not received the same local review.
 #
 #  LICENSING: OpenStreetMap is ODbL. The map carries permanent attribution and
 #  the published derived data remains openly downloadable.
@@ -396,6 +403,21 @@ overpass_url = "https://overpass-api.de/api/interpreter"
 # Fayette County, Kentucky. Selecting on the name alone also matches Fayette
 # counties in several other states; the stable OSM relation id is unambiguous.
 relation_id = 130537
+# University of Kentucky campus multipolygon, retained as provenance for the
+# enclosing campus. Generic walkways are imported only inside the academic-core
+# polygon below.
+campus_relation_id = 4815526
+# UK defines the academic core as bounded by Rose Street, Washington Avenue,
+# South Limestone Street and Avenue of Champions. Clockwise corners follow
+# those four LFUCG street corridors. Geometry is clipped to this polygon after
+# download, so a way crossing the boundary cannot bring its outside tail along.
+academic_core_polygon = [
+  [-84.5080283, 38.0357406], # S Limestone / Washington Ave
+  [-84.5051538, 38.0342349], # east end of Washington at the Rose corridor
+  [-84.4997921, 38.0378381], # Rose St / Avenue of Champions
+  [-84.5038474, 38.0415376], # Avenue of Champions / S Limestone
+]
+academic_core_boundary_source = "UK academic core: Rose Street, Washington Avenue, S Limestone Street, and Avenue of Champions"
 fetch_timeout_s = 150
 fetch_attempts = 3
 
@@ -424,6 +446,11 @@ reviewed_street_connector_names = ["University Court"]
 # edit war cannot silently swing the "bike network" between builds.
 expect_min_miles = 10.0
 expect_max_miles = 40.0
+# The academic core contains roughly 8.5 raw walkway miles; LFUCG overlap
+# removal lowers the published total. This gate catches an empty/partial
+# response or an accidentally broadened query.
+expect_min_campus_path_miles = 3.0
+expect_max_campus_path_miles = 12.0
 expect_min_access_miles = 0.3
 expect_max_access_miles = 2.0
 expect_min_reviewed_street_miles = 0.6
@@ -435,6 +462,21 @@ expect_max_reviewed_street_miles = 1.0
 required_access_names = ["Baptist Health Entrance 1"]
 
 attribution = "Supplementary paths © OpenStreetMap contributors, ODbL"
+
+
+# ---------------------------------------------------------------------------
+#  Routing preferences
+# ---------------------------------------------------------------------------
+[routing]
+# A campus walkway is secondary only where it runs alongside on-road bicycle
+# infrastructure. Interior campus paths and useful cut-throughs keep their
+# ordinary LTS 1 cost.
+campus_bike_near_m = 30.0
+campus_bike_parallel_degrees = 30.0
+campus_bike_min_parallel_share = 0.50
+# Strong enough for an LTS 1 walkway to yield to a somewhat longer LTS 2 bike
+# facility. Fastest remains literal shortest distance and ignores this factor.
+campus_parallel_bike_factor = 1.50
 
 
 # ---------------------------------------------------------------------------
@@ -488,12 +530,13 @@ simplify_residential = 0.00003
 "methodology.json" = 12
 "manifest.json" = 2
 
-# Budgets that apply when osm.enabled -- 154 extra path miles land in the
-# critical-path layer. Kept separate so the default build still fails if it
-# creeps past its own, much tighter, limit.
+# Budgets that apply when osm.enabled -- supplementary OSM paths, including
+# UK academic-core walkways, land in the critical-path layer. Kept
+# separate so the default build still fails if it creeps past its own, much
+# tighter, limit.
 [export.budget_kb_osm]
-"network.geojson" = 170
-"graph.json" = 260
+"network.geojson" = 250
+"graph.json" = 340
 
 
 # ---------------------------------------------------------------------------

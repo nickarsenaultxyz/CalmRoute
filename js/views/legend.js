@@ -9,8 +9,8 @@
 
 import {
   EXISTING_ONLY_NOTE, LTS, LTS_ORDER_LEGEND,
-} from '../config.js?v=20260731-field-notebook';
-import { swatchSvg } from '../layers.js?v=20260731-field-notebook';
+} from '../config.js?v=20260731-solid-lines';
+import { swatchSvg } from '../layers.js?v=20260731-solid-lines';
 import { escapeHtml } from '../lib/format.js';
 
 export function render(stats, state) {
@@ -20,9 +20,8 @@ export function render(stats, state) {
     ? Math.round(layers.residential.miles)
     : null;
 
-  // Report the mileage that is actually drawn. Quiet streets are hidden by
-  // default, and 8,908 of them carry most of the low-stress mileage, so the
-  // city-wide totals would badly overstate what is on screen.
+  // Report the mileage that is actually drawn. This also stays correct if
+  // someone uses the neighbourhood-street switch to simplify the map.
   const shown = (lts) => {
     if (!layers) return null;
     const sources = state.residential

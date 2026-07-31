@@ -1,26 +1,28 @@
 /** Application entry point. */
 
 import {
-  DEFAULT_ROUTE_LEVEL, LTS, LTS_ORDER_LEGEND, QUIETEST_ROUTE_LEVEL, ROUTE_LEVELS,
-} from './config.js?v=20260731-field-notebook';
+  LTS, LTS_ORDER_LEGEND,
+} from './config.js?v=20260731-solid-lines';
 import {
   deferResidential, loadContext, loadCouncil, loadGraph, loadManifest,
   loadMethodology, loadNetwork, loadStats,
-} from './data.js?v=20260729-live-data-refresh';
+} from './data.js?v=20260731-all-streets';
 import {
   addConnectorLayer, addLayers, addRouteLayers, addSources, hitLayers, setLtsVisible,
   setRoute, setRouteAccess, setRouteEndpoints, setSourceVisible,
-} from './layers.js?v=20260731-field-notebook';
-import { clipToEnd } from './lib/graph.js';
+} from './layers.js?v=20260731-uk-campus-thin';
+import { clipToEnd } from './lib/graph.js?v=20260731-road-near-bike';
 import { announce, easeTo, isCoarsePointer } from './lib/a11y.js';
-import { debounce, onPopState, read, write } from './lib/urlstate.js';
+import {
+  debounce, onPopState, read, write,
+} from './lib/urlstate.js?v=20260731-all-streets';
 import { checkSupport, createMap, setBasemap } from './map.js?v=20260731-field-notebook';
-import { Panel } from './panel.js';
+import { Panel } from './panel.js?v=20260731-calmroute-layout';
 import * as browse from './views/browse.js?v=20260731-field-notebook';
-import * as detail from './views/detail.js?v=20260731-field-notebook';
-import * as legend from './views/legend.js?v=20260731-field-notebook';
-import * as methodology from './views/methodology.js?v=20260731-field-notebook';
-import * as routeView from './views/route.js?v=20260731-field-notebook';
+import * as detail from './views/detail.js?v=20260731-uk-campus';
+import * as legend from './views/legend.js?v=20260731-solid-lines';
+import * as methodology from './views/methodology.js?v=20260731-uk-campus';
+import * as routeView from './views/route.js?v=20260731-solid-lines';
 import * as settings from './views/settings.js?v=20260731-field-notebook';
 import * as share from './views/share.js?v=20260731-routing-focus';
 
@@ -43,8 +45,12 @@ const app = window.__lexbike = {
   graph: null,
   contextPromise: null,
   route: {
-    from: null, to: null, level: DEFAULT_ROUTE_LEVEL,
-    picking: 'from', result: null,
+    from: null, to: null,
+    picking: 'from',
+    screen: 'explore',
+    selected: 'balanced',
+    candidates: [],
+    result: null,
     locationSearch: {
       from: { query: '', status: 'idle', results: [], message: '' },
       to: { query: '', status: 'idle', results: [], message: '' },
@@ -69,6 +75,7 @@ function fail(message, err) {
   app.panel?.show({
     title: 'Could not load the map',
     root: true,
+    view: 'error',
     html: `<p class="note">${message}</p>
            <p class="tech">The data is open and can be downloaded directly:
              <a href="./data/network.geojson">network.geojson</a>.</p>`,
@@ -84,6 +91,7 @@ function showLegend({ push = false } = {}) {
   const body = app.panel.show({
     title: 'Lexington Bike Routes',
     root: true,
+    view: 'legend',
     html: legend.render(app.stats, app.state),
   });
   legend.mount(body, {
@@ -122,6 +130,7 @@ function showBrowse({ push = true } = {}) {
     const index = browse.buildIndex(app.featuresById);
     const body = app.panel.show({
       title: 'Browse streets',
+      view: 'browse',
       html: browse.render(index, { loadedAll }),
     });
     const ctl = browse.mount(body, index, {
@@ -168,6 +177,7 @@ function showShare({ push = true } = {}) {
   const ctx = { stats: app.stats, segment, council: app.council, announce };
   const body = app.panel.show({
     title: segment ? 'Share this street' : 'Share this map',
+    view: 'share',
     html: share.render(app.stats, ctx),
   });
   share.mount(body, ctx);
@@ -179,6 +189,7 @@ function showMethodology({ push = true } = {}) {
   app.state.view = 'methodology';
   app.panel.show({
     title: 'What the ratings mean',
+    view: 'methodology',
     html: methodology.render(app.methodology, app.stats),
   });
   app.panel.focusBody();
@@ -188,8 +199,10 @@ function showMethodology({ push = true } = {}) {
 function showRoute({ push = true } = {}) {
   app.state.view = 'route';
   const body = app.panel.show({
-    title: 'Plan a route',
-    html: routeView.render(app.route, app.stats),
+    title: 'Calmroute',
+    root: true,
+    view: 'route',
+    html: routeView.render(app.route, app.stats, app.state),
   });
   routeView.mount(body, {
     onPick: (which) => {
@@ -204,27 +217,20 @@ function showRoute({ push = true } = {}) {
     },
     onSearch: searchRouteLocation,
     onChooseLocation: chooseRouteLocation,
-    onClear: (which) => {
-      app.route[which] = null;
-      app.route.locationSearch[which] = {
-        query: '', status: 'idle', results: [], message: '',
-      };
-      updateRouteEndpoints();
-      recomputeRoute();
-    },
+    onFind: recomputeRoute,
     onClearBoth: () => {
       app.route.from = app.route.to = null;
-      app.route.result = null;
       app.route.picking = 'from';
       app.route.locationSearch = {
         from: { query: '', status: 'idle', results: [], message: '' },
         to: { query: '', status: 'idle', results: [], message: '' },
       };
       updateRouteEndpoints();
-      drawRoute(null);
+      resetRouteResults();
       showRoute({ push: false });
     },
     onSwap: () => {
+      const hadResults = app.route.screen !== 'explore';
       const t = app.route.from;
       app.route.from = app.route.to;
       app.route.to = t;
@@ -232,32 +238,29 @@ function showRoute({ push = true } = {}) {
       app.route.locationSearch.from = app.route.locationSearch.to;
       app.route.locationSearch.to = search;
       updateRouteEndpoints();
-      recomputeRoute();
+      resetRouteResults();
+      if (hadResults) recomputeRoute();
+      else showRoute({ push: false });
     },
-    onLevel: (level) => {
-      app.route.level = Math.max(0, Math.min(QUIETEST_ROUTE_LEVEL, level));
-      announce(`Route preference: ${ROUTE_LEVELS[app.route.level].label}.`);
-      recomputeRoute();
+    onPreset: selectRouteCandidate,
+    onDetail: () => {
+      if (!app.route.result || app.route.result.kind !== 'ok') return;
+      app.route.screen = 'detail';
+      showRoute({ push: false });
     },
-    // The offer attached to a route that turned out to be busy: switch to the
-    // setting that found the quieter one, so the slider agrees with the map.
-    onQuieter: () => {
-      const alt = app.route.result?.quieter;
-      if (!alt) return;
-      app.route.level = alt.level;
-      recomputeRoute();
+    onCompare: () => {
+      app.route.screen = 'results';
+      showRoute({ push: false });
     },
-    onAccept: () => {
-      // Draw the compromised route the rider explicitly asked to see.
-      if (app.route.fallbackResult) {
-        app.route.result = { kind: 'ok', ...app.route.fallbackResult };
-        if (!drawRoute(app.route.fallbackResult)) {
-          app.route.result = { kind: 'error' };
-        }
-        showRoute({ push: false });
-      }
+    onLts: (lts, on) => {
+      on ? app.state.lts.add(lts) : app.state.lts.delete(lts);
+      setLtsVisible(app.map, lts, on);
+      syncUrl();
+      showRoute({ push: false });
     },
-    onNav: (view) => openView(view, { push: true }),
+    onNav: (view) => view === 'legend'
+      ? showLegend({ push: true })
+      : openView(view, { push: true }),
   }, app.route);
   write(app.state, { push });
 }
@@ -266,6 +269,7 @@ function showSettings({ push = true } = {}) {
   app.state.view = 'style';
   const body = app.panel.show({
     title: 'Map style',
+    view: 'style',
     html: settings.render(app.state.basemap),
   });
   settings.mount(body, {
@@ -289,6 +293,7 @@ function showDetail(feature, { push = true } = {}) {
 
   const body = app.panel.show({
     title: props.nm || 'Unnamed street',
+    view: 'segment',
     html: detail.render(props, {
       stats: app.stats, aadtYear: app.aadtYear, council: app.council,
     }),
@@ -348,12 +353,8 @@ async function ensureGraph() {
       if (!context || !residential) {
         throw new Error('A map geometry layer required for routing did not load.');
       }
-      const { buildGraph, components } = await import('./lib/graph.js');
+      const { buildGraph } = await import('./lib/graph.js?v=20260731-road-near-bike');
       app.graph = buildGraph(raw);
-      // This internal connectivity check distinguishes a route that cannot
-      // satisfy the strict comfort setting from a pair that is absent from the
-      // routable graph altogether.
-      app.lowStressComponents = components(app.graph, 2);
       return app.graph;
     });
   }
@@ -363,13 +364,15 @@ async function ensureGraph() {
 async function recomputeRoute() {
   const { from, to } = app.route;
   if (!from || !to) {
-    app.route.result = null;
-    drawRoute(null);
+    resetRouteResults();
     showRoute({ push: false });
     return;
   }
 
+  app.route.screen = 'results';
+  app.route.candidates = [];
   app.route.result = { kind: 'pending' };
+  app.route.picking = null;
   showRoute({ push: false });
 
   let g;
@@ -383,13 +386,14 @@ async function recomputeRoute() {
     return;
   }
   const { snapToNetwork } = await import('./lib/graph.js');
-  const dj = await import('./lib/dijkstra.js?v=20260731-field-notebook');
+  const dj = await import('./lib/dijkstra.js?v=20260731-road-near-bike');
 
   const geometryOf = (id) => app.featuresById.get(id)?.geometry?.coordinates;
   const snapA = snapToNetwork(g, geometryOf, from.lng, from.lat);
   const snapB = snapToNetwork(g, geometryOf, to.lng, to.lat);
   if (!snapA || !snapB) {
     app.route.result = { kind: 'none' };
+    app.route.candidates = [];
     drawRoute(null);
     showRoute({ push: false });
     return;
@@ -397,40 +401,45 @@ async function recomputeRoute() {
   app.route.snapA = snapA;
   app.route.snapB = snapB;
 
-  const level = app.route.level;
-  const primary = routeBetweenSnaps(g, dj, snapA, snapB,
-    ROUTE_LEVELS[level].key);
-  const shortest = routeBetweenSnaps(g, dj, snapA, snapB, 'shortest');
+  // These are three searches over the actual graph, not sample routes from the
+  // design reference. "Fastest" is the shortest-distance path because the
+  // network has no turn timing or elevation data to support a made-up ETA
+  // model; all three cards use the same transparent 10 mph estimate.
+  const specs = [
+    { key: 'calmest', label: 'Calmest', mode: 'quiet' },
+    { key: 'balanced', label: 'Balanced', mode: 'balanced' },
+    { key: 'fastest', label: 'Fastest', mode: 'shortest' },
+  ];
+  const candidates = specs.flatMap((spec) => {
+    const raw = routeBetweenSnaps(g, dj, snapA, snapB, spec.mode);
+    return raw ? [decorateRoute(raw, spec, snapA, snapB)] : [];
+  });
 
-  if (!primary) {
-    // Distinguish "no comfortable route" from "not connected at all". The
-    // first is the finding; the second is a data gap. Only the strictest
-    // setting is a hard filter, so only it can refuse a connected pair.
-    const fallback = level === QUIETEST_ROUTE_LEVEL
-      ? routeBetweenSnaps(g, dj, snapA, snapB, 'quiet') : null;
-    app.route.fallbackResult = fallback
-      ? { ...fallback, detour: shortest ? fallback.miles / shortest.miles : null }
-      : null;
-    const connectedAtLowStress = app.lowStressComponents
-      && app.lowStressComponents[snapA.u] === app.lowStressComponents[snapB.u];
-    app.route.result = (fallback || !connectedAtLowStress)
-      ? {
-          kind: 'blocked',
-          fallback: app.route.fallbackResult,
-        }
-      : { kind: 'none' };
+  if (!candidates.length) {
+    app.route.result = { kind: 'none' };
+    app.route.candidates = [];
     drawRoute(null);
     showRoute({ push: false });
     return;
   }
 
-  app.route.result = {
-    kind: 'ok',
-    ...primary,
-    level,
-    detour: shortest ? primary.miles / shortest.miles : null,
-    quieter: quieterThan(g, dj, snapA, snapB, primary, level),
-  };
+  const fastest = candidates.find((candidate) => candidate.key === 'fastest')
+    || candidates.reduce((best, route) => route.miles < best.miles ? route : best);
+  for (const route of candidates) {
+    route.extraMinutes = Math.max(
+      0,
+      Math.round(route.miles * 6) - Math.round(fastest.miles * 6),
+    );
+  }
+  app.route.candidates = candidates;
+  if (!candidates.some((candidate) => candidate.key === app.route.selected)) {
+    app.route.selected = candidates.some((candidate) => candidate.key === 'balanced')
+      ? 'balanced' : candidates[0].key;
+  }
+  const primary = candidates.find(
+    (candidate) => candidate.key === app.route.selected,
+  ) || candidates[0];
+  app.route.result = { kind: 'ok', ...primary };
   if (!drawRoute(primary)) {
     app.route.result = { kind: 'error' };
     showRoute({ push: false });
@@ -443,35 +452,94 @@ async function recomputeRoute() {
     : `Route found: ${primary.miles.toFixed(1)} miles, comfortable the whole way.`);
 }
 
-/**
- * The least-stressful alternative worth offering, or null.
- *
- * A note saying "0.4 miles of this is busy" is only half an answer; the rider's
- * next question is what avoiding it would cost. So the quieter settings are
- * searched too, and the offer carries the real distance rather than being a
- * button that might do nothing. Scanning forward rather than stopping at the
- * next notch matters because one step quieter often finds the same road — the
- * penalty has to clear the detour before the route changes at all.
- *
- * Costs up to two extra searches, each four Dijkstras of 0.2-0.8 ms, and only
- * runs when the route is actually stressful.
- */
-function quieterThan(g, dj, snapA, snapB, primary, level) {
-  if (primary.stressMiles <= 0.01) return null;
+function resetRouteResults() {
+  app.route.screen = 'explore';
+  app.route.candidates = [];
+  app.route.result = null;
+  app.route.snapA = null;
+  app.route.snapB = null;
+  drawRoute(null);
+}
 
-  for (let next = level + 1; next <= QUIETEST_ROUTE_LEVEL; next++) {
-    const alt = routeBetweenSnaps(g, dj, snapA, snapB, ROUTE_LEVELS[next].key);
-    if (!alt) continue;
-    // Either measure improving is an improvement. Requiring less total stress
-    // would reject the most valuable trade the quieter settings make -- swapping
-    // an arterial for a longer run of busy collector, which lowers `severeMiles`
-    // while raising `stressMiles`. Ties are not offers: an unchanged route under
-    // a different label reads as a broken button.
-    const lessArterial = alt.severeMiles < primary.severeMiles - 0.01;
-    const lessStress = alt.stressMiles < primary.stressMiles - 0.01;
-    if (lessArterial || lessStress) return { level: next, ...alt };
+function selectRouteCandidate(key) {
+  const candidate = app.route.candidates.find((route) => route.key === key);
+  if (!candidate) return;
+  app.route.selected = key;
+  app.route.result = { kind: 'ok', ...candidate };
+  app.route.screen = 'results';
+  if (!drawRoute(candidate)) app.route.result = { kind: 'error' };
+  showRoute({ push: false });
+  announce(`${candidate.label} route selected: ${candidate.miles.toFixed(1)} miles.`);
+}
+
+/** Add only attributes that exist in the published route graph or GeoJSON. */
+function decorateRoute(raw, spec, snapA, snapB) {
+  return {
+    ...raw,
+    key: spec.key,
+    label: spec.label,
+    mode: spec.mode,
+    segments: routeSegments(raw, snapA, snapB),
+    extraMinutes: 0,
+  };
+}
+
+/**
+ * Convert graph edges into contiguous, truthful leg-by-leg sections.
+ *
+ * Partial start/end edges use the exact fractions charged by
+ * routeBetweenSnaps. Everything else comes straight from the route's edge
+ * indices and published feature properties. Adjacent edges are grouped only
+ * when their displayed street name, facility, stress, speed and lane count
+ * match.
+ */
+function routeSegments(result, snapA, snapB) {
+  const segments = [];
+  const add = (edge, miles) => {
+    if (edge == null || !(miles > 0)) return;
+    const id = app.graph.eId[edge];
+    const props = app.featuresById.get(id)?.properties || {};
+    const segment = {
+      id,
+      name: props.nm || (props.fac === 7 ? 'Path connection' : 'Unnamed street'),
+      lts: app.graph.eLts[edge],
+      miles,
+      fac: props.fac ?? 0,
+      speed: props.sp ?? null,
+      lanes: props.ln ?? null,
+    };
+    const previous = segments[segments.length - 1];
+    if (
+      previous
+      && previous.name === segment.name
+      && previous.lts === segment.lts
+      && previous.fac === segment.fac
+      && previous.speed === segment.speed
+      && previous.lanes === segment.lanes
+    ) {
+      previous.miles += miles;
+    } else {
+      segments.push(segment);
+    }
+  };
+
+  const partial = result.partial || {};
+  if (partial.sameEdge) {
+    add(snapA.edge, result.miles);
+    return segments;
   }
-  return null;
+
+  const partialMiles = (snap, node) => app.graph.eMi[snap.edge] * (
+    node === snap.u ? snap.fraction : 1 - snap.fraction
+  );
+  if (snapA && partial.startNode != null) {
+    add(snapA.edge, partialMiles(snapA, partial.startNode));
+  }
+  for (const edge of result.edges) add(edge, app.graph.eMi[edge]);
+  if (snapB && partial.endNode != null) {
+    add(snapB.edge, partialMiles(snapB, partial.endNode));
+  }
+  return segments;
 }
 
 /**
@@ -516,7 +584,13 @@ function routeBetweenSnaps(g, dj, snapA, snapB, mode) {
       const addA = g.eMi[snapA.edge] * a.frac;
       const addB = g.eMi[snapB.edge] * b.frac;
       const total = r.miles + addA + addB;
-      if (!best || total < best.total) best = { total, r, a, b, addA, addB };
+      const addCostA = dj.edgeCost(g, snapA.edge, mode) * a.frac;
+      const addCostB = dj.edgeCost(g, snapB.edge, mode) * b.frac;
+      const cost = r.cost + addCostA + addCostB;
+      if (!isFinite(cost)) continue;
+      if (!best || cost < best.cost) {
+        best = { total, cost, r, a, b, addA, addB };
+      }
     }
   }
   if (!best) return null;
@@ -539,9 +613,9 @@ function routeBetweenSnaps(g, dj, snapA, snapB, mode) {
  * Draw the route from geometry already in memory, keyed by feature id.
  *
  * The two partial edges at the ends are clipped at the snap points, and a short
- * dashed stub covers whatever is left between the pin and the network -- that
- * last bit is real (you do have to get to the street somehow) and pretending
- * otherwise would draw a route that starts in a field.
+ * thin neutral link covers whatever is left between the pin and the network --
+ * that last bit is real (you do have to get to the street somehow) and
+ * pretending otherwise would draw a route that starts in a field.
  */
 function drawRoute(result) {
   if (!result) {
@@ -611,14 +685,22 @@ function drawRoute(result) {
 }
 
 function setRoutePoint(which, lngLat) {
+  const lng = Number(lngLat.lng);
+  const lat = Number(lngLat.lat);
+  const name = lngLat.name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
   app.route[which] = {
-    lng: Number(lngLat.lng),
-    lat: Number(lngLat.lat),
-    ...(lngLat.name ? { name: lngLat.name } : {}),
+    lng,
+    lat,
+    name,
   };
+  app.route.locationSearch[which].query = name;
+  app.route.locationSearch[which].status = 'idle';
+  app.route.locationSearch[which].results = [];
+  app.route.locationSearch[which].message = '';
   app.route.picking = which === 'from' && !app.route.to ? 'to' : null;
   updateRouteEndpoints();
-  recomputeRoute();
+  resetRouteResults();
+  showRoute({ push: false });
 }
 
 function updateRouteEndpoints() {
@@ -757,7 +839,7 @@ function installInteraction(map) {
     ];
     const hits = map.queryRenderedFeatures(box, { layers });
     if (!hits.length) {
-      showLegend({ push: true });
+      if (app.state.view !== 'route') showLegend({ push: true });
       return;
     }
     // Prefer the best facility when several overlap under one finger.
@@ -792,12 +874,16 @@ async function boot() {
     showBrowse({ push: true });
   });
 
-  // Escape returns to the overview from any secondary view, and clears a
-  // selection -- the conventional way out of a detail pane.
+  // The route planner is the product's home. Escape steps back from route
+  // detail to comparison, or returns there from a secondary map tool.
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
-    if (app.state.view && app.state.view !== 'legend') {
-      showLegend({ push: true });
+    if (app.state.view === 'route' && app.route.screen === 'detail') {
+      app.route.screen = 'results';
+      showRoute({ push: false });
+      app.panel.focusBody();
+    } else if (app.state.view && app.state.view !== 'route') {
+      showRoute({ push: true });
       app.panel.focusBody();
     }
   });
@@ -826,9 +912,12 @@ async function boot() {
   loadStats(manifest).then((s) => {
     app.stats = s;
     app.aadtYear = s?.data_sources?.aadt_count_years?.median ?? null;
-    // Render the overview immediately so the panel is never blank; the URL's
-    // own view is restored below, once the data it may depend on has arrived.
-    if (app.state.view !== 'segment') showLegend();
+    // Render the requested root immediately so the panel is never blank. The
+    // routing home uses only these real summary figures until endpoints exist.
+    if (app.state.view !== 'segment') {
+      if (requestedView === 'route') showRoute({ push: false });
+      else showLegend();
+    }
   }).catch((err) => console.warn('stats unavailable', err));
 
   loadMethodology(manifest)
@@ -865,16 +954,14 @@ async function boot() {
       return;
     }
 
-    // Busy roads next. Not deferred to idle like the residential bulk: without
-    // them the map reads as a handful of disconnected trails floating in space,
-    // which overstates how good the network is.
+    // Busy roads next: without them the map reads as a handful of disconnected
+    // trails floating in space, which overstates how good the network is.
     // Start this eagerly, but keep the promise so routing can wait for the
     // geometry instead of drawing a graph result with context-road gaps.
     ensureContext().catch(() => {});
 
-    // Off by default, so this is not prefetched -- it is fetched the first time
-    // the layer is switched on (or immediately if a deep link arrived with it
-    // already enabled).
+    // The complete rated network is the default, so neighbourhood streets load
+    // immediately. A `res=0` shared link can still defer them until requested.
     app.residential = deferResidential(map, manifest, {
       eager: app.state.residential,
       onStart: () => setLoading('Adding neighbourhood streets…'),
@@ -892,6 +979,8 @@ async function boot() {
       restoreSelection();
     } else if (requestedView && !['legend', 'segment'].includes(requestedView)) {
       openView(requestedView, { push: false });
+    } else if (requestedView === 'route') {
+      showRoute({ push: false });
     }
 
     map.on('moveend', syncUrl);
@@ -955,6 +1044,7 @@ boot().catch((err) => {
   app.panel?.show({
     title: 'The map failed to start',
     root: true,
+    view: 'error',
     html: `<p class="note">${stale
       ? 'This usually means your browser is holding an old copy of the page. '
         + 'A hard refresh should fix it.'
