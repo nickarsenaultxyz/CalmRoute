@@ -3,25 +3,44 @@
    override above 720px. */
 
 :root {
-  --bg: #f7f7f5;
-  --surface: #ffffff;
-  --ink: #16181d;
-  --ink-soft: #5b6270;
-  --ink-faint: #868d9a;
-  --line: #e3e5ea;
-  --accent: #1d4ed8;
-  --focus: #1d4ed8;
+  /* Field notebook — warm paper ground, terracotta accent, sage second voice,
+     Spectral over IBM Plex Mono, near-square corners and hard offset shadows.
+     Ported from the Calmroute design mockup's default theme. */
+  --bg: #e7e1d2;          /* sand: page ground + inset/hover fills */
+  --surface: #f4f0e6;     /* paper: the panel and cards sit on this */
+  --ink: #211e18;
+  --ink-soft: #6f6858;
+  --ink-faint: #8f8674;
+  --line: rgba(33, 30, 24, 0.20);
+  --line-strong: rgba(33, 30, 24, 0.42);
+  --accent: #b3491c;      /* terracotta */
+  --accent-deep: #7d3010;
+  --accent-2: #4d6b3c;    /* sage */
+  --tint: #e9d5c4;        /* terracotta wash */
+  --tint-2: #d9e2c9;      /* sage wash */
+  --chrome: #2b2721;      /* dark chrome for tooltips/overlays */
+  --chrome-text: #f4f0e6;
+  --focus: #b3491c;
 
-  --lts0: #9ca3af;
-  --lts1: #00875a;
-  --lts2: #2563eb;
-  --lts3: #d97706;
-  --lts4: #dc2626;
-  --planned: #7c3aed;
+  /* Calm -> stressful ramp: pencil green, deep green, amber, rust. */
+  --lts0: #8f8674;
+  --lts1: #7d9e64;
+  --lts2: #3d6b4a;
+  --lts3: #c98a1e;
+  --lts4: #a33b1f;
+  --planned: #6f5a8a;
+
+  --font-body: 'Spectral', Georgia, "Times New Roman", serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, "SFMono-Regular", Menlo, monospace;
 
   --panel-w: 380px;
-  --radius: 12px;
-  --shadow: 0 2px 16px rgba(16, 20, 30, 0.14);
+  --radius: 4px;          /* over-rounded is not this system; corners are crisp */
+  --radius-sm: 2px;
+  --bw: 1.5px;            /* borders are a visible ink line, not a hairline */
+  --shadow: 2px 2px 0 rgba(33, 30, 24, 0.16);
+  --shadow-lg: 4px 4px 0 rgba(33, 30, 24, 0.16);
+  --grid: rgba(33, 30, 24, 0.075);   /* graph-paper rule */
+  --grid-size: 24px;
   --sheet-peek: 84px;
 }
 
@@ -39,9 +58,18 @@ html, body {
   overflow: hidden;
   background: var(--bg);
   color: var(--ink);
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 15px/1.55 var(--font-body);
   -webkit-text-size-adjust: 100%;
 }
+
+/* Small caps mono labels — the notebook's field-label voice. Reused across the
+   legend miles, section headers, ticks and technical notes. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px; font-weight: 500; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-soft);
+}
+::selection { background: var(--tint); }
 
 #map { position: absolute; inset: 0; }
 
@@ -60,7 +88,7 @@ html, body {
 .skip-link {
   position: absolute; top: -100px; left: 8px; z-index: 60;
   background: var(--surface); color: var(--ink);
-  padding: 10px 14px; border-radius: 8px; box-shadow: var(--shadow);
+  padding: 10px 14px; border-radius: var(--radius); box-shadow: var(--shadow);
   text-decoration: none; font-weight: 600;
 }
 .skip-link:focus { top: 8px; }
@@ -89,11 +117,17 @@ html, body {
 #panel {
   position: absolute; z-index: 40;
   background: var(--surface);
+  /* Graph-paper rule over the paper ground. */
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 calc(var(--grid-size) - 1px), var(--grid) calc(var(--grid-size) - 1px) var(--grid-size)),
+    repeating-linear-gradient(90deg, transparent 0 calc(var(--grid-size) - 1px), var(--grid) calc(var(--grid-size) - 1px) var(--grid-size));
   display: flex; flex-direction: column;
-  box-shadow: var(--shadow);
+  border: var(--bw) solid var(--line-strong);
+  box-shadow: var(--shadow-lg);
 
   /* mobile: bottom sheet */
   left: 0; right: 0; bottom: 0;
+  border-bottom: 0;
   border-radius: var(--radius) var(--radius) 0 0;
   max-height: 92vh;
   padding-bottom: env(safe-area-inset-bottom);
@@ -131,7 +165,7 @@ html, body {
   min-width: 44px; min-height: 44px;      /* WCAG target size */
   display: grid; place-items: center;
   border: 0; background: transparent; color: var(--ink-soft);
-  font-size: 20px; line-height: 1; cursor: pointer; border-radius: 8px;
+  font-size: 20px; line-height: 1; cursor: pointer; border-radius: var(--radius);
 }
 .icon-btn:hover { background: var(--bg); color: var(--ink); }
 
@@ -159,7 +193,7 @@ html, body {
 .legend-row {
   display: flex; align-items: center; gap: 10px; width: 100%;
   min-height: 44px; padding: 6px 8px; margin: 0 0 1px;
-  border: 0; border-radius: 8px; background: transparent;
+  border: 0; border-radius: var(--radius); background: transparent;
   font: inherit; color: inherit; text-align: left; cursor: pointer;
 }
 .legend-row:hover { background: var(--bg); }
@@ -177,7 +211,7 @@ html, body {
 
 .note {
   margin: 12px 0 0; padding: 10px 12px;
-  background: var(--bg); border-radius: 8px;
+  background: var(--bg); border-radius: var(--radius);
   font-size: 12.5px; color: var(--ink-soft); line-height: 1.45;
 }
 .note strong { color: var(--ink); }
@@ -188,13 +222,14 @@ html, body {
 
 .btn {
   min-height: 44px; padding: 8px 14px;
-  border: 1px solid var(--line); border-radius: 8px;
+  border: var(--bw) solid var(--line); border-radius: var(--radius);
   background: var(--surface); color: var(--ink);
   font: inherit; font-size: 13.5px; cursor: pointer;
 }
 .btn:hover { background: var(--bg); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn.primary:hover { filter: brightness(1.08); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--chrome-text); }
+.btn.primary:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
+.btn:active { transform: translateY(1px); }
 
 .share-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; }
 
@@ -207,7 +242,7 @@ html, body {
 
 .scale { width: 100%; border-collapse: collapse; margin: 14px 0; }
 .scale td {
-  padding: 9px 0; border-bottom: 1px solid var(--line); vertical-align: middle;
+  padding: 9px 0; border-bottom: var(--bw) solid var(--line); vertical-align: middle;
 }
 .scale .swatch-cell { width: 44px; }
 .scale b { display: block; font-size: 14px; }
@@ -226,13 +261,15 @@ ul.plain li { margin: 0 0 6px; font-size: 13.5px; color: var(--ink-soft); }
 /* ------------------------------------------------------------------- share */
 
 .section {
-  margin: 22px 0 8px; font-size: 14px; font-weight: 650;
-  padding-top: 14px; border-top: 1px solid var(--line);
+  margin: 22px 0 8px; padding-top: 14px;
+  border-top: var(--bw) solid var(--line);
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft);
 }
 
 .rep {
   margin: 8px 0 0; padding: 10px 12px;
-  background: var(--bg); border-radius: 8px;
+  background: var(--bg); border-radius: var(--radius);
 }
 .rep b { display: block; font-size: 14px; }
 .rep a, .rep span { display: block; font-size: 13px; color: var(--ink-soft); }
@@ -246,7 +283,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .field { display: block; margin: 2px 0 10px; }
 .field input {
   width: 100%; min-height: 44px; padding: 8px 12px;
-  border: 1px solid var(--line); border-radius: 8px;
+  border: var(--bw) solid var(--line); border-radius: var(--radius);
   background: var(--surface); color: var(--ink); font: inherit; font-size: 15px;
 }
 
@@ -255,7 +292,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .browse-row {
   display: flex; align-items: center; gap: 10px; width: 100%;
   min-height: 44px; padding: 6px 8px;
-  border: 0; border-radius: 8px; background: transparent;
+  border: 0; border-radius: var(--radius); background: transparent;
   font: inherit; color: inherit; text-align: left; cursor: pointer;
 }
 .browse-row:hover { background: var(--bg); }
@@ -279,7 +316,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .facts { width: 100%; border-collapse: collapse; margin: 0 0 4px; }
 .facts th, .facts td {
   text-align: left; padding: 7px 0; font-size: 14px;
-  border-bottom: 1px solid var(--line); vertical-align: top;
+  border-bottom: var(--bw) solid var(--line); vertical-align: top;
 }
 .facts th { font-weight: 500; color: var(--ink-soft); width: 46%; }
 .facts td { font-variant-numeric: tabular-nums; }
@@ -294,7 +331,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .hover-card {
   position: absolute; z-index: 35; pointer-events: none;
   background: var(--surface); box-shadow: var(--shadow);
-  border-radius: 8px; padding: 7px 10px; font-size: 13px;
+  border-radius: var(--radius); padding: 7px 10px; font-size: 13px;
   max-width: 240px;
 }
 .hover-card b { display: block; font-weight: 600; }
@@ -324,10 +361,10 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 
 .location-group {
   padding: 9px; margin: 0 0 8px;
-  border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+  border: var(--bw) solid var(--line); border-radius: var(--radius); background: var(--surface);
 }
 .location-group:focus-within {
-  border-color: var(--accent); box-shadow: 0 0 0 2px rgba(29, 78, 216, .15);
+  border-color: var(--accent); box-shadow: 0 0 0 2px rgba(179, 73, 28, .18);
 }
 .location-row {
   display: flex; align-items: end; gap: 8px; width: 100%;
@@ -335,15 +372,16 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .location-row .pin {
   flex: 0 0 auto; width: 14px; height: 14px; border-radius: 50%;
   margin: 0 0 15px;
-  border: 3px solid #fff; box-shadow: 0 0 0 1px var(--line);
+  border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--line-strong);
 }
-.location-row .pin.from { background: #16a34a; }
-.location-row .pin.to { background: #dc2626; }
+/* Wayfinding matches the map's A/B endpoints: ink start, terracotta destination. */
+.location-row .pin.from { background: var(--ink); }
+.location-row .pin.to { background: var(--accent); }
 .location-field { flex: 1 1 auto; min-width: 0; }
 .location-field b { display: block; margin: 0 0 3px; font-size: 13px; }
 .location-field input {
   width: 100%; min-height: 44px; padding: 8px 10px;
-  border: 1px solid var(--line); border-radius: 7px;
+  border: var(--bw) solid var(--line); border-radius: var(--radius);
   background: var(--surface); color: var(--ink); font: inherit; font-size: 14px;
 }
 .location-submit { flex: 0 0 auto; padding-inline: 10px; }
@@ -365,8 +403,8 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
   display: grid; gap: 4px; margin: 8px 0 0 22px;
 }
 .location-result {
-  width: 100%; padding: 8px; border: 1px solid var(--line);
-  border-radius: 7px; background: var(--bg); color: var(--ink);
+  width: 100%; padding: 8px; border: var(--bw) solid var(--line);
+  border-radius: var(--radius); background: var(--bg); color: var(--ink);
   font: inherit; font-size: 12.5px; line-height: 1.35; text-align: left;
   cursor: pointer;
 }
@@ -403,7 +441,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 /* The quieter-route offer. Green edge because it is the comfortable option,
    matching the LTS 1 swatch rather than inventing a third accent. */
 .alt {
-  margin: 12px 0 0; padding: 12px; border-radius: 8px;
+  margin: 12px 0 0; padding: 12px; border-radius: var(--radius);
   border: 1px dashed var(--line); background: var(--bg);
 }
 .alt b { display: block; font-size: 13.5px; }
@@ -411,7 +449,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .alt .share-actions { margin-top: 10px; }
 
 .verdict {
-  margin: 16px 0 0; padding: 12px; border-radius: 8px;
+  margin: 16px 0 0; padding: 12px; border-radius: var(--radius);
   border-left: 4px solid var(--line); background: var(--bg);
 }
 .verdict b { display: block; font-size: 15px; margin-bottom: 2px; }
@@ -419,3 +457,25 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .verdict.good { border-left-color: var(--lts1); }
 .verdict.warn { border-left-color: var(--lts3); }
 .verdict.bad  { border-left-color: var(--lts4); }
+
+/* ---------------------------------------------------- field-notebook numerals
+
+   Figures read as ledger entries: mono, tabular. Labels (facts row headers,
+   the slider ticks) drop to the small-caps mono field-label voice. */
+.legend-row .miles,
+.browse-row .miles,
+.facts td,
+.scale .num,
+.stress-pref .tech {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.facts td { font-size: 13px; }
+.scale .num { font-size: 11px; }
+
+.facts th,
+.stress-pref .ticks {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.facts th { font-weight: 500; }

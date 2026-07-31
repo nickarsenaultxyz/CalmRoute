@@ -81,7 +81,9 @@ export function addLayers(map) {
         filter,
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
-          'line-color': 'rgba(255,255,255,0.85)',
+          // Paper-coloured casing so lines sit on the notebook page, not on
+          // a white halo the ground no longer has.
+          'line-color': 'rgba(251,248,240,0.85)',
           'line-width': widthExpr(base + 2.4),
           // A halo is noise when the city fits on screen.
           'line-opacity': casingOpacity(),
@@ -199,7 +201,7 @@ export function addRouteLayers(map) {
   map.addLayer({
     id: 'route-casing', type: 'line', source: 'route',
     layout: { 'line-cap': 'round', 'line-join': 'round' },
-    paint: { 'line-color': '#ffffff', 'line-width': 12, 'line-opacity': 0.95 },
+    paint: { 'line-color': '#fbf8f0', 'line-width': 12, 'line-opacity': 0.95 },
   });
   map.addLayer({
     id: 'route-line', type: 'line', source: 'route',
@@ -222,16 +224,18 @@ export function addRouteLayers(map) {
     paint: {
       // Visible enough to read as "you have to get here yourself", distinct
       // enough from the solid route not to be mistaken for part of the ride.
-      'line-color': '#6b7280', 'line-width': 3.5, 'line-opacity': 0.9,
+      'line-color': '#6f6858', 'line-width': 3.5, 'line-opacity': 0.9,
       'line-dasharray': [1.5, 1.5],
     },
   });
   map.addLayer({
     id: 'route-endpoints', type: 'circle', source: 'route-endpoints',
     paint: {
+      // Ink start (A), terracotta destination (B) — matching the panel's
+      // from/to pins.
       'circle-radius': 8,
-      'circle-color': ['match', ['get', 'role'], 'from', '#16a34a', '#dc2626'],
-      'circle-stroke-color': '#ffffff',
+      'circle-color': ['match', ['get', 'role'], 'from', '#211e18', '#b3491c'],
+      'circle-stroke-color': '#f4f0e6',
       'circle-stroke-width': 3,
     },
   });
