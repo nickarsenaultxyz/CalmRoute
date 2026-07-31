@@ -60,21 +60,24 @@ export function render(stats, state) {
 
   return `
     ${headline}
-    <div class="legend" role="group" aria-label="Filter by comfort rating">
-      ${rows}
+    <div class="box">
+      <div class="eyebrow">Traffic stress · mapped streets</div>
+      <div class="legend" role="group" aria-label="Filter by comfort rating">
+        ${rows}
+      </div>
+      <button class="legend-row" role="switch" aria-checked="${state.residential}"
+              data-toggle="residential">
+        <svg class="swatch" viewBox="0 0 34 12" aria-hidden="true">
+          <line x1="1" y1="3.5" x2="33" y2="3.5" stroke="${LTS[1].color}" stroke-width="2.5"/>
+          <line x1="1" y1="8.5" x2="33" y2="8.5" stroke="${LTS[2].color}" stroke-width="2.5"/>
+        </svg>
+        <span class="label"><b>Neighbourhood streets</b>
+        <span>${state.residential
+          ? 'Quiet streets with no bike facility'
+          : 'Hidden — turn on to add quiet streets'}</span></span>
+        <span class="miles">${residentialMiles != null ? `${residentialMiles} mi` : ''}</span>
+      </button>
     </div>
-    <button class="legend-row" role="switch" aria-checked="${state.residential}"
-            data-toggle="residential">
-      <svg class="swatch" viewBox="0 0 34 12" aria-hidden="true">
-        <line x1="1" y1="3.5" x2="33" y2="3.5" stroke="${LTS[1].color}" stroke-width="2.5"/>
-        <line x1="1" y1="8.5" x2="33" y2="8.5" stroke="${LTS[2].color}" stroke-width="2.5"/>
-      </svg>
-      <span class="label"><b>Neighbourhood streets</b>
-      <span>${state.residential
-        ? 'Quiet streets with no bike facility'
-        : 'Hidden — turn on to add quiet streets'}</span></span>
-      <span class="miles">${residentialMiles != null ? `${residentialMiles} mi` : ''}</span>
-    </button>
     <p class="note">${EXISTING_ONLY_NOTE}</p>
     ${state.residential ? '' : `
     <p class="note">

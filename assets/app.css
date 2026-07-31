@@ -149,13 +149,23 @@ html, body {
   border-radius: 999px; background: var(--line);
 }
 
-.panel-head {
-  display: flex; align-items: center; gap: 8px;
-  padding: 2px 14px 8px;
+/* App bar — a persistent brand mark (bike glyph in a sage dot) beside the
+   per-view title, with the back affordance to its left on sub-views. */
+.appbar {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 14px; margin: 0;
   flex: 0 0 auto;
+  border-bottom: var(--bw) solid var(--line);
 }
-.panel-head h1 {
-  margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -0.01em;
+.brand-dot {
+  flex: 0 0 auto; width: 24px; height: 24px;
+  display: grid; place-items: center;
+  border-radius: var(--radius); background: var(--accent-2); color: var(--surface);
+}
+.brand-dot svg { width: 15px; height: 15px; display: block; }
+.appbar h1 {
+  margin: 0; font-size: 17px; font-weight: 600; letter-spacing: .01em;
+  font-family: var(--font-heading, var(--font-body));
   flex: 1 1 auto; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -183,7 +193,7 @@ html, body {
     max-height: none; height: auto !important;
   }
   .sheet-handle { display: none; }
-  .panel-head { padding-top: 12px; }
+  .appbar { padding-top: 12px; }
 }
 
 /* ----------------------------------------------------------- legend/filter */
@@ -196,7 +206,8 @@ html, body {
   border: 0; border-radius: var(--radius); background: transparent;
   font: inherit; color: inherit; text-align: left; cursor: pointer;
 }
-.legend-row:hover { background: var(--bg); }
+/* Rows live inside a sand .box, so hover lifts to paper rather than to sand. */
+.legend-row:hover { background: var(--surface); }
 .legend-row[aria-checked="false"] { opacity: .42; }
 
 .legend-row .swatch { flex: 0 0 auto; width: 34px; height: 12px; }
@@ -421,9 +432,8 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
    every current engine, so there is no need to rebuild the control per-vendor
    and lose the platform's own keyboard and touch behaviour with it. */
 .stress-pref { margin: 18px 0 0; }
-.stress-pref > label {
-  display: block; font-size: 13px; font-weight: 550; color: var(--ink);
-}
+/* The label is now an .eyebrow inside .pref-head; leave its styling to that
+   class rather than the old block label. */
 .stress-pref input[type="range"] {
   display: block; width: 100%; margin: 10px 0 0;
   min-height: 44px;                       /* a fingertip target, not a hairline */
@@ -479,3 +489,86 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
   text-transform: uppercase;
 }
 .facts th { font-weight: 500; }
+
+/* ------------------------------------------------ mockup panel components
+
+   Ported from the Calmroute design's panel so the live panel reads as the same
+   system: surface boxes, tag chips, a key/value list, and a leg/list step row. */
+
+.box {
+  background: var(--bg); border: var(--bw) solid var(--line);
+  border-radius: var(--radius); padding: 12px;
+}
+.box + .box, .box + .note, .note + .box { margin-top: 12px; }
+.box > .eyebrow:first-child { display: block; margin-bottom: 9px; }
+.box-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 9px;
+}
+.box-head .eyebrow { margin: 0; }
+.box-head .grow { flex: 1 1 auto; }
+
+.tag {
+  display: inline-flex; align-items: center; font-family: var(--font-mono);
+  font-size: 10px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: var(--radius); white-space: nowrap;
+}
+.tag-accent { background: var(--tint); color: var(--accent-deep); }
+.tag-accent-2 { background: var(--tint-2); color: var(--accent-2); }
+.tag-neutral { background: var(--surface); color: var(--ink-soft);
+  border: var(--bw) solid var(--line); }
+
+/* Key/value fact list — the mockup's .kv, an alternative to the .facts table.
+   Label column is `auto` so short labels never wrap; the value column takes the
+   rest and wraps there instead when a value runs long. */
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px;
+  margin: 0; font-size: 13px; align-items: baseline; }
+.kv dt { color: var(--ink-soft); white-space: nowrap; }
+.kv dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-weight: 500; text-align: right; }
+
+/* Leg-by-leg / list step, with a colour bar for the stress rating. */
+.steps { display: flex; flex-direction: column; }
+.step {
+  display: grid; grid-template-columns: 4px 1fr auto; gap: 10px;
+  padding: 9px 0; align-items: start;
+  border-bottom: var(--bw) dashed var(--line);
+}
+.step:last-child { border-bottom: 0; }
+.step .bar { width: 4px; min-height: 26px; height: 100%; border-radius: var(--radius-sm);
+  justify-self: center; background: var(--line-strong); }
+.step .st { font-size: 13.5px; font-weight: 600; }
+.step .nt { font-size: 11.5px; color: var(--ink-soft); }
+.step .mi { font-family: var(--font-mono); font-size: 11px; white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+
+/* Button variants to match the mockup's secondary/ghost alongside .primary. */
+.btn.ghost { border-color: transparent; background: transparent; color: var(--accent-deep);
+  min-height: 0; padding: 6px 8px; }
+.btn.ghost:hover { background: var(--tint); }
+
+/* Custom range track — the calm->stressful gradient and square thumb from the
+   mockup, kept on a native <input> so keyboard and touch behaviour survive. */
+.stress-pref input[type="range"].themed {
+  -webkit-appearance: none; appearance: none; accent-color: auto;
+  background: transparent; height: 34px;
+}
+.stress-pref input[type="range"].themed::-webkit-slider-runnable-track {
+  height: 6px; border-radius: var(--radius); border: var(--bw) solid var(--line);
+  background: linear-gradient(90deg, var(--lts1), var(--lts2) 38%, var(--lts3) 70%, var(--lts4));
+}
+.stress-pref input[type="range"].themed::-moz-range-track {
+  height: 6px; border-radius: var(--radius); border: var(--bw) solid var(--line);
+  background: linear-gradient(90deg, var(--lts1), var(--lts2) 38%, var(--lts3) 70%, var(--lts4));
+}
+.stress-pref input[type="range"].themed::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 22px; margin-top: -9px;
+  border-radius: var(--radius-sm); background: var(--surface);
+  border: 2px solid var(--ink); box-shadow: var(--shadow);
+}
+.stress-pref input[type="range"].themed::-moz-range-thumb {
+  width: 14px; height: 20px; border-radius: var(--radius-sm);
+  background: var(--surface); border: 2px solid var(--ink);
+}
+.stress-pref input[type="range"].themed:active::-webkit-slider-thumb { border-color: var(--accent); }
+.stress-pref .pref-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.stress-pref .pref-head .grow { flex: 1 1 auto; }

@@ -35,9 +35,9 @@ const MODEL_BASIS_NOTE =
 
 function fact(label, value, unknownText) {
   if (value == null || value === '') {
-    return `<tr><th>${label}</th><td class="unknown">${unknownText}</td></tr>`;
+    return `<dt>${label}</dt><dd class="unknown">${unknownText}</dd>`;
   }
-  return `<tr><th>${label}</th><td>${escapeHtml(value)}</td></tr>`;
+  return `<dt>${label}</dt><dd>${escapeHtml(value)}</dd>`;
 }
 
 export function render(props, { stats, aadtYear, council } = {}) {
@@ -52,43 +52,53 @@ export function render(props, { stats, aadtYear, council } = {}) {
   const kind = KIND_PUBLIC[props.kind ?? 0];
   const descriptor = props.fac ? facility : `${kind}, no bike facility`;
 
-  return `
-    <div class="rating">
-      <span class="dot" style="background:${lts.color}"></span>
-      <span>
-        <b>${escapeHtml(lts.short)}</b>
-        <span>${escapeHtml(descriptor)}</span>
-      </span>
-    </div>
+  const tagClass = props.lts >= 3 ? 'tag-accent'
+    : props.lts === 0 ? 'tag-neutral' : 'tag-accent-2';
 
-    <table class="facts">
-      ${fact('Posted speed', speed(props.sp), 'Not on record')}
-      ${fact('Traffic', traffic(props.ad, {
-        year: aadtYear,
-        measured: props.basis === BASIS_MEASURED,
-      }), 'Not available')}
-      ${props.kind === 0
-        ? fact('Road type', ROAD_CLASS_PUBLIC[props.rc], 'Not on record')
-        : ''}
-      ${props.kind === 0
-        ? fact(
-          'Through lanes',
-          props.ln == null ? null : `${props.ln} (estimated)`,
-          'Not available',
-        )
-        : ''}
-      ${fact('Length', miles(props.mi), '—')}
-      ${props.src === 'osm'
-        ? fact(
-          props.osm_role === 'reviewed_street'
-            ? 'Reviewed-street data'
-            : props.fac ? 'Path data' : 'Access-road data',
-          'OpenStreetMap contributors (ODbL)',
-          '—',
-        )
-        : ''}
-      ${councilRow(props, council)}
-    </table>
+  return `
+    <div class="box">
+      <div class="box-head">
+        <span class="tag ${tagClass}">LTS ${props.lts}</span>
+        <span class="grow"></span>
+        <span class="tag tag-neutral">${escapeHtml(conf.label)} confidence</span>
+      </div>
+      <div class="rating">
+        <span class="dot" style="background:${lts.color}"></span>
+        <span>
+          <b>${escapeHtml(lts.short)}</b>
+          <span>${escapeHtml(descriptor)}</span>
+        </span>
+      </div>
+
+      <dl class="kv">
+        ${fact('Posted speed', speed(props.sp), 'Not on record')}
+        ${fact('Traffic', traffic(props.ad, {
+          year: aadtYear,
+          measured: props.basis === BASIS_MEASURED,
+        }), 'Not available')}
+        ${props.kind === 0
+          ? fact('Road type', ROAD_CLASS_PUBLIC[props.rc], 'Not on record')
+          : ''}
+        ${props.kind === 0
+          ? fact(
+            'Through lanes',
+            props.ln == null ? null : `${props.ln} (estimated)`,
+            'Not available',
+          )
+          : ''}
+        ${fact('Length', miles(props.mi), '—')}
+        ${props.src === 'osm'
+          ? fact(
+            props.osm_role === 'reviewed_street'
+              ? 'Reviewed-street data'
+              : props.fac ? 'Path data' : 'Access-road data',
+            'OpenStreetMap contributors (ODbL)',
+            '—',
+          )
+          : ''}
+        ${councilRow(props, council)}
+      </dl>
+    </div>
 
     <p class="note">${escapeHtml(basis)}</p>
 
@@ -110,7 +120,7 @@ function councilRow(props, council) {
   if (props.cd == null) return '';
   const rep = council?.districts?.[String(props.cd)];
   const who = rep?.name ? ` — ${rep.name}` : '';
-  return `<tr><th>Council district</th><td>${props.cd}${escapeHtml(who)}</td></tr>`;
+  return `<dt>Council district</dt><dd>${props.cd}${escapeHtml(who)}</dd>`;
 }
 
 /** Compact hover preview: name and rating only, no DOM churn beyond this. */
