@@ -320,10 +320,10 @@ target_street = "S MILL ST"
 max_m = 90.0
 
 [[conflation.reviewed_connectors]]
-name = "Fine Arts south path to Colfax Street"
+name = "Sellers Alley cycleway to Scott Street"
 source = [-84.50949, 38.04007]
-target_street = "COLFAX ST"
-max_m = 55.0
+target_street = "SCOTT ST"
+max_m = 90.0
 
 
 # ---------------------------------------------------------------------------
