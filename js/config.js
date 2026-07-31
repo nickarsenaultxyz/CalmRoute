@@ -9,21 +9,24 @@
 
 export const DATA_DIR = './data/';
 
-/** LTS 0-4. There is no LTS 5; see params.toml. */
+/** LTS 0-4. There is no LTS 5; see params.toml.
+ *  Colours are the Field notebook calm->stressful ramp (pencil green, deep
+ *  green, amber, rust); LTS 0 is a warm neutral that recedes into the paper.
+ *  The rating semantics and widths are unchanged from the previous palette. */
 export const LTS = {
-  0: { color: '#9ca3af', width: 2.0, opacity: 0.50,
+  0: { color: '#8f8674', width: 2.0, opacity: 0.50,
        short: 'Bikes not permitted', detail: 'Interstate or parkway',
        dash: [1, 2] },
-  1: { color: '#00875a', width: 5.0, opacity: 0.95,
+  1: { color: '#7d9e64', width: 5.0, opacity: 0.95,
        short: 'Relaxed', detail: 'Good for kids and new riders',
        dash: null },
-  2: { color: '#2563eb', width: 5.0, opacity: 0.95,
+  2: { color: '#3d6b4a', width: 5.0, opacity: 0.95,
        short: 'Comfortable for most adults', detail: 'Quiet streets and bike lanes',
        dash: null },
-  3: { color: '#d97706', width: 4.0, opacity: 0.90,
+  3: { color: '#c98a1e', width: 4.0, opacity: 0.90,
        short: 'Busy', detail: 'For confident riders',
        dash: [3, 1.5] },
-  4: { color: '#dc2626', width: 4.0, opacity: 0.85,
+  4: { color: '#a33b1f', width: 4.0, opacity: 0.85,
        short: 'Stressful', detail: 'Experienced riders only',
        dash: [2, 1.5] },
 };

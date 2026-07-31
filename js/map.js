@@ -16,14 +16,29 @@ function rasterSource(key) {
   };
 }
 
+/**
+ * Field-notebook treatment for the basemap tiles: desaturate and let the warm
+ * paper background wash through, so the LTS colours are the only saturated
+ * thing on screen. Skipped for satellite, where true colour is the point, and
+ * irrelevant to `none` (no raster layer at all).
+ */
+function rasterPaint(key) {
+  if (key === 'satellite') return {};
+  return {
+    'raster-saturation': -0.5,
+    'raster-contrast': -0.05,
+    'raster-opacity': 0.88,   // paper (#f4f0e6) shows through as a sepia wash
+  };
+}
+
 function baseStyle(key) {
   const src = rasterSource(key);
   return {
     version: 8,
     sources: src ? { basemap: src } : {},
     layers: [
-      { id: 'bg', type: 'background', paint: { 'background-color': '#f7f7f5' } },
-      ...(src ? [{ id: 'basemap', type: 'raster', source: 'basemap' }] : []),
+      { id: 'bg', type: 'background', paint: { 'background-color': '#f4f0e6' } },
+      ...(src ? [{ id: 'basemap', type: 'raster', source: 'basemap', paint: rasterPaint(key) }] : []),
     ],
   };
 }
@@ -122,6 +137,6 @@ export function setBasemap(map, key) {
   map.addSource('basemap', src);
   // Insert directly above the background so every data layer stays on top.
   const first = map.getStyle().layers.find((l) => l.id !== 'bg');
-  map.addLayer({ id: 'basemap', type: 'raster', source: 'basemap' },
+  map.addLayer({ id: 'basemap', type: 'raster', source: 'basemap', paint: rasterPaint(key) },
     first ? first.id : undefined);
 }
