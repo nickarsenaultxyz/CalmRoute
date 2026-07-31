@@ -53,12 +53,9 @@ export function render(stats, state) {
 
   const headline = low ? `
     <p class="note">
-      <strong>${low.miles.toLocaleString('en-US')} miles</strong> are comfortable for an
-      ordinary adult — but they are split into
-      <strong>${low.islands.toLocaleString('en-US')} disconnected islands</strong>,
-      and the largest holds only ${low.largest_island_share_pct}% of them.
-      About ${stats.ridable_lts3.miles.toLocaleString('en-US')} miles are ridable
-      if you are a confident rider.
+      Plan a trip that balances <strong>lower-stress streets</strong> with a
+      practical route. The route keeps each segment's colour so you can see
+      where conditions change before you ride.
     </p>` : '';
 
   return `
@@ -86,7 +83,7 @@ export function render(stats, state) {
       network readable — turn them on to colour them in.
     </p>`}
     <nav class="panel-nav" aria-label="More">
-      <button class="btn" data-nav="route">Plan a route</button>
+      <button class="btn primary" data-nav="route">Plan a route</button>
       <button class="btn" data-nav="browse">Browse streets as a list</button>
       <button class="btn" data-nav="share">Share</button>
       <button class="btn" data-nav="style">Map style</button>

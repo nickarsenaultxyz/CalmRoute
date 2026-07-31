@@ -37,8 +37,6 @@ export const loadStats = (m) => getJSON(m._url('stats'));
 export const loadMethodology = (m) => getJSON(m._url('methodology'));
 export const loadNetwork = (m) => getJSON(m._url('network'));
 export const loadContext = (m) => getJSON(m._url('context'));
-export const loadIslands = (m) => getJSON(m._url('islands'));
-export const loadGaps = (m) => getJSON(m._url('gaps'));
 export const loadGraph = (m) => getJSON(m._url('graph'));
 export const loadPlanned = (m) => getJSON(m._url('planned'));
 export const loadCouncil = (m) => getJSON(m._url('council'));

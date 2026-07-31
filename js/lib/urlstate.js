@@ -11,9 +11,8 @@
  * Residential streets default OFF.
  *
  * They are 8,908 of 14,169 features and they swamp the map: at any zoom the
- * page reads as a wall of blue, which buries the built bike network — the thing
- * the map exists to show — and visually contradicts the headline about the
- * network being fragmented. Off by default, one tap to bring back.
+ * page reads as a wall of blue, which makes route conditions and dedicated bike
+ * facilities harder to distinguish. Off by default, one tap to bring back.
  */
 const DEFAULTS = { view: 'legend', basemap: 'light', residential: false };
 
