@@ -394,6 +394,20 @@ def test_routing_graph_and_drawn_segments_use_the_same_lts(manifest, features):
     assert not failures, f"graph and map LTS disagree: {failures[:10]}"
 
 
+def test_beaumont_facility_covers_both_one_way_carriageways(features):
+    """LFUCG supplies one named facility line for both directions of the loop."""
+    beaumont = [
+        feature["properties"]
+        for feature in features
+        if feature["properties"].get("kind") == 0
+        and feature["properties"].get("nm") == "Beaumont Centre Cir"
+    ]
+
+    assert len(beaumont) >= 20, "expected both carriageways of the loop"
+    assert all(props["fac"] == 4 for props in beaumont)
+    assert all(props["lts"] == 2 for props in beaumont)
+
+
 def test_coordinates_are_rounded_for_payload_size(features):
     for f in features[:500]:
         for x, y in f["geometry"]["coordinates"]:

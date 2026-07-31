@@ -165,6 +165,46 @@ def test_conflation_credits_the_nearby_part_of_a_long_curve():
     assert out.loc[0, "fac_source_ids"] == [207]
 
 
+def test_named_corridor_reaches_both_carriageways_but_not_another_road():
+    """One corridor facility line can represent two parallel one-way streets.
+
+    The extra reach is safe only with exact road-name agreement: an unrelated
+    parallel road at the same distance must remain untreated.
+    """
+    streets = gpd.GeoDataFrame(
+        {
+            "id": [1, 2],
+            "rdclass": [5, 5],
+            "road_name": ["Beaumont Centre Cir", "Nearby Service Rd"],
+        },
+        geometry=[
+            LineString([(0, 15), (100, 15)]),
+            LineString([(0, -15), (100, -15)]),
+        ],
+        crs=32616,
+    )
+    facilities = gpd.GeoDataFrame(
+        {
+            "id_src": [207],
+            "on_road": [True],
+            "fac": ["buffered"],
+            "network_name": ["BEAUMONT CENTRE CIR"],
+        },
+        geometry=[LineString([(0, 0), (100, 0)])],
+        crs=32616,
+    )
+
+    out = conflate_on_road(
+        streets,
+        facilities,
+        params_mod.load(),
+        check_quality=False,
+    )
+
+    assert out["fac"].tolist() == ["buffered", "none"]
+    assert out["fac_source_ids"].tolist() == [[207], []]
+
+
 def test_local_bearing_still_rejects_a_perpendicular_crossing():
     street = LineString([(-20, 0), (20, 0)])
     facility = LineString([(0, -20), (0, 20)])

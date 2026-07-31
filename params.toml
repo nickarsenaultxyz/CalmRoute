@@ -292,6 +292,12 @@ lts = 1                     # short, visible, dashed; see [conflation].connector
 
 [conflation]
 buffer_m = 12.0
+# A facility corridor is often digitized once between two one-way carriageways.
+# When its Name_Network exactly matches the LFUCG road name, this narrowly
+# larger reach lets both directions inherit the facility. Beaumont Centre
+# Circle's carriageways are 12.2-12.7 m from the single buffered-lane record,
+# just outside the ordinary geometric tolerance.
+named_corridor_buffer_m = 16.0
 min_coverage = 0.55            # share of a centreline that must be covered
 bearing_tolerance_deg = 30.0
 exclude_rdclass = [1, 2]       # never conflate a facility onto an interstate
@@ -519,7 +525,7 @@ sensitivity_flip_forces_low = true
 [[sensitivity.runs]]
 name = "mixed_35mph_as_lts2"
 set = { "lts.mixed.speed_35_lts" = 2 }
-why = "Dominant parameter. Measured: largest island 58.9% vs 18.7%, 1,623 segments changed."
+why = "Dominant parameter: tests whether unprotected 35 mph streets are LTS 2 or LTS 3."
 
 [[sensitivity.runs]]
 name = "aadt_break_2000"
@@ -534,7 +540,7 @@ why = "Upper bound on the same question."
 [[sensitivity.runs]]
 name = "conflation_buffer_8m"
 set = { "conflation.buffer_m" = 8.0 }
-why = "Lower bound on the buffer. Measured: fails the 90% recall gate at 79.0%."
+why = "Lower bound on the ordinary geometric buffer; the recall gate must still pass."
 
 [[sensitivity.runs]]
 name = "conflation_buffer_20m"
@@ -544,7 +550,7 @@ why = "Upper bound on conflation aggressiveness."
 [[sensitivity.runs]]
 name = "connector_15m"
 set = { "conflation.connector_max_m" = 15.0 }
-why = "Off-road trail attachment. Measured: barely matters, 18.5% vs 18.7%."
+why = "Lower bound on off-road trail attachment reach."
 
 [[sensitivity.runs]]
 name = "connector_40m"

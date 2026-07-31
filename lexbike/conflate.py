@@ -140,6 +140,13 @@ def local_bearing_delta(
     )
 
 
+def _name_key(value) -> str:
+    """Case/whitespace-insensitive key for a scalar source name."""
+    if value is None or pd.isna(value):
+        return ""
+    return " ".join(str(value).casefold().split())
+
+
 # ---------------------------------------------------------------------------
 #  On-road conflation
 # ---------------------------------------------------------------------------
@@ -160,6 +167,13 @@ def conflate_on_road(
     segments, so the scenario pass over funded projects turns it off.
     """
     buffer_m = float(params["conflation.buffer_m"])
+    # The named value is an extension of the ordinary buffer, never a cap.
+    # Sensitivity runs deliberately raise the ordinary buffer above the
+    # production value; in that case the ordinary reach remains authoritative.
+    named_buffer_m = max(
+        buffer_m,
+        float(params.get("conflation.named_corridor_buffer_m", buffer_m)),
+    )
     min_cov = float(params["conflation.min_coverage"])
     tol_deg = float(params["conflation.bearing_tolerance_deg"])
     excluded = set(int(x) for x in params["conflation.exclude_rdclass"])
@@ -180,14 +194,24 @@ def conflate_on_road(
     log.info(
         "conflating %d treated on-road facilities onto %d centrelines "
         "(%d untreated 'Preferred Route' records excluded) "
-        "[buffer %.1f m, coverage %.2f, bearing +/-%.0f deg]",
-        len(on_road), len(st), untreated, buffer_m, min_cov, tol_deg,
+        "[buffer %.1f m, named-corridor buffer %.1f m, coverage %.2f, "
+        "bearing +/-%.0f deg]",
+        len(on_road), len(st), untreated, buffer_m, named_buffer_m, min_cov,
+        tol_deg,
     )
     if on_road.empty:
         raise ConflationError("no treated on-road facilities to conflate")
 
     fac_buffers = on_road.geometry.buffer(buffer_m)
-    tree = STRtree(fac_buffers.values)
+    named_fac_buffers = on_road.geometry.buffer(named_buffer_m)
+    tree = STRtree(named_fac_buffers.values)
+    fac_names = [
+        _name_key(value)
+        for value in on_road.get(
+            "network_name",
+            pd.Series("", index=on_road.index, dtype="string"),
+        )
+    ]
 
     assigned: list[str] = []
     source_ids: list[list[int]] = []
@@ -217,20 +241,75 @@ def conflate_on_road(
         # Keep only candidates running roughly parallel *where the two records
         # overlap*. A facility can be a long curve or loop, so its whole-record
         # mean bearing says nothing about the tangent beside this short block.
+        #
+        # An exact corridor-name match gets a narrowly larger reach. LFUCG
+        # sometimes digitizes one facility line between two one-way carriageways;
+        # the ordinary 12 m geometric buffer then credits only the nearer
+        # direction. Name agreement scopes the extra reach to the same road.
         street_corridor = geom.buffer(buffer_m)
-        keep = []
+        named_street_corridor = geom.buffer(named_buffer_m)
+        street_name = _name_key(st.at[i, "road_name"]) \
+            if "road_name" in st.columns else ""
+        standard_corridors = {}
+        named_corridors = {}
+        had_nearby = False
         for j in candidates:
             j = int(j)
+            facility = on_road.geometry.values[j]
+
+            # Preserve the ordinary geometric match exactly when it already
+            # covers enough of the block. The named-corridor reach is a fallback,
+            # not a competing vote that can replace a more protective facility
+            # already credited by the standard pass.
+            standard = fac_buffers.values[j]
+            if standard.intersects(geom):
+                had_nearby = True
+                delta = local_bearing_delta(
+                    geom,
+                    facility,
+                    street_corridor,
+                    standard,
+                )
+                if delta is None or delta <= tol_deg:
+                    standard_corridors[j] = standard
+
+            same_named_corridor = bool(street_name) and street_name == fac_names[j]
+            if not same_named_corridor:
+                continue
+
+            named = named_fac_buffers.values[j]
+            if not named.intersects(geom):
+                continue
+            had_nearby = True
             delta = local_bearing_delta(
-                geom,
-                on_road.geometry.values[j],
-                street_corridor,
-                fac_buffers.values[j],
+                geom, facility, named_street_corridor, named
             )
             if delta is None or delta <= tol_deg:
-                keep.append(j)
-        if not keep:
-            skipped_bearing += 1
+                named_corridors[j] = named
+
+        # First try the normal 12 m match. Only a block it cannot cover may use
+        # the exact-name extension, so the extension can fill a missing parallel
+        # carriageway but cannot relabel an already matched block.
+        standard_covered = 0.0
+        if standard_corridors:
+            standard_union = unary_union(list(standard_corridors.values()))
+            standard_covered = geom.intersection(standard_union).length
+
+        if standard_covered >= seg_len * min_cov:
+            candidate_corridors = standard_corridors
+            covered = standard_covered
+        else:
+            candidate_corridors = dict(standard_corridors)
+            candidate_corridors.update(named_corridors)
+            if candidate_corridors:
+                corridor = unary_union(list(candidate_corridors.values()))
+                covered = geom.intersection(corridor).length
+            else:
+                covered = 0.0
+
+        if not candidate_corridors:
+            if had_nearby:
+                skipped_bearing += 1
             assigned.append("none")
             source_ids.append([])
             continue
@@ -240,8 +319,6 @@ def conflate_on_road(
         # lane that becomes a buffered lane mid-block — together satisfy one long
         # centreline. Grouping before unioning made each category fail
         # independently and lost 45% of the network.
-        corridor = unary_union([fac_buffers.values[j] for j in keep])
-        covered = geom.intersection(corridor).length
         if covered < seg_len * min_cov:
             skipped_coverage += 1
             assigned.append("none")
@@ -254,10 +331,10 @@ def conflate_on_road(
         # block's rating.
         contrib: dict[str, float] = {}
         ids_by_cat: dict[str, list[int]] = {}
-        for j in keep:
+        for j in candidate_corridors:
             category = on_road["fac"].values[j]
             contrib[category] = contrib.get(category, 0.0) + geom.intersection(
-                fac_buffers.values[j]
+                candidate_corridors[j]
             ).length
             ids_by_cat.setdefault(category, []).append(int(on_road.at[j, "id_src"]))
 
