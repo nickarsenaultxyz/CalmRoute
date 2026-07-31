@@ -174,7 +174,7 @@ def test_no_connector_is_longer_than_its_reviewed_search_radius(graph):
     )
 
 
-def test_fine_arts_reviewed_connectors_join_paths_to_streets(graph):
+def test_reviewed_campus_connectors_join_the_intended_streets(graph):
     """The two requested campus links must be genuine graph junctions."""
     features = {}
     for name in ("network.geojson", "context.geojson", "residential.geojson"):
@@ -197,6 +197,7 @@ def test_fine_arts_reviewed_connectors_join_paths_to_streets(graph):
         (-84.50717, 38.04241),
         (-84.50949, 38.04007),
     }
+    sellers_source = (-84.50949, 38.04007)
     actual_sources = set()
     target_names = set()
     for connector in reviewed:
@@ -229,12 +230,40 @@ def test_fine_arts_reviewed_connectors_join_paths_to_streets(graph):
             props for rows in incident.values() for props in rows
             if props.get("fac") != 7 and props.get("kind") == 0
         ]
-        target_names.update(
+        connector_target_names = {
             props["nm"] for props in street_rows if props.get("nm")
-        )
+        }
+        target_names.update(connector_target_names)
+
+        if source == sellers_source:
+            assert "Scott St" in connector_target_names
+            source_node = next(
+                node for node in (u, v)
+                if tuple(graph["nodes"][node]) == sellers_source
+            )
+            source_paths = [
+                features[edge_id]
+                for edge_id in adjacency[source_node]
+                if features[edge_id]["properties"].get("fac") == 6
+            ]
+            assert source_paths, "Scott connector does not touch the cycleway"
+
+            reaches_sellers_alley = False
+            for path in source_paths:
+                path_u = path["properties"]["u"]
+                path_v = path["properties"]["v"]
+                other_node = path_v if path_u == source_node else path_u
+                neighbouring_names = {
+                    features[edge_id]["properties"].get("nm")
+                    for edge_id in adjacency[other_node]
+                }
+                reaches_sellers_alley |= "Sellers Aly" in neighbouring_names
+            assert reaches_sellers_alley, (
+                "Scott connector's cycleway does not join Sellers Alley"
+            )
 
     assert actual_sources == expected_sources
-    assert {"S Mill St", "Colfax St"} <= target_names
+    assert {"S Mill St", "Scott St"} <= target_names
 
 
 def test_the_low_stress_network_is_actually_routable(graph):

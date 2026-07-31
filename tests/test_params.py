@@ -95,7 +95,7 @@ def test_reviewed_connectors_are_narrowly_scoped():
 
     assert len(connectors) == 2
     assert {c["target_street"] for c in connectors} == {
-        "S MILL ST", "COLFAX ST",
+        "S MILL ST", "SCOTT ST",
     }
     assert all(len(c["source"]) == 2 for c in connectors)
     assert max(c["max_m"] for c in connectors) <= 90
