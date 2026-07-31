@@ -139,7 +139,7 @@ centrelines canonical removes that entire class of problem.
 | `lex_street_data.geojson` | LFUCG | 13,775 street centrelines |
 | `Bicycle_Network_Master.geojson` | LFUCG | 542 bike facility segments |
 | `StaList_Fayette (1).csv` | KYTC | 546 traffic count stations |
-| Live Overpass query | OpenStreetMap | County-scoped cycleways, bicycle-designated paths, UK campus walkways, and narrowly reviewed street exceptions |
+| Live Overpass query | OpenStreetMap | County-scoped cycleways, bicycle-designated paths, UK academic-core walkways, and narrowly reviewed street exceptions |
 
 A scheduled GitHub Actions build downloads the current
 [LFUCG Bicycle Network Public View](https://www.arcgis.com/home/item.html?id=90961d8f5c854453abf4123d4a99e139)
@@ -155,12 +155,14 @@ for unambiguous off-road cycling paths and service roads carrying explicit
 bicycle permission. Parking aisles, private access and one-way service roads are
 excluded. Geometry already represented by LFUCG is removed by an overlap check;
 every remaining OSM segment is marked in the download and attributed on the
-map. In addition, every non-private walking path inside the exact
-[University of Kentucky campus relation](https://www.openstreetmap.org/relation/4815526)
-is imported as LTS 1 because bicycles are permitted on those campus paths;
-explicit `bicycle=no` paths remain excluded. Untagged footways elsewhere in the
-county are not imported. Calm and balanced routing treats a campus walkway as
-secondary only where it runs parallel to nearby on-road bicycle infrastructure,
+map. In addition, every non-private walking path inside the
+[University of Kentucky academic core](https://uknow.uky.edu/campus-news/charting-future-university-kentucky)—bounded
+by Rose Street, Washington Avenue, South Limestone Street and Avenue of
+Champions—is imported as LTS 1 because bicycles are permitted on those paths;
+explicit `bicycle=no` paths remain excluded. Untagged footways outside that
+academic core are not imported. Calm and balanced routing treats an
+academic-core walkway as secondary only where it runs parallel to nearby
+on-road bicycle infrastructure,
 using a 1.50× cost factor so the road facility remains preferred. Interior
 campus cut-throughs retain their ordinary LTS 1 cost; the Fastest option remains
 literal shortest distance. The reviewed Baptist

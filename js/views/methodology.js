@@ -42,17 +42,18 @@ export function render(methodology, stats) {
   const campusFactor =
     methodology?.rules?.routing?.campus_parallel_bike_factor ?? 1.50;
   const osmSource = stats?.osm_paths?.enabled
-    ? ` Supplementary off-road paths, University of Kentucky campus walkways,
+    ? ` Supplementary off-road paths, University of Kentucky academic-core
+      walkways,
       and explicitly bicycle-authorized access roads from
       <a href="https://www.openstreetmap.org/copyright"
          target="_blank" rel="noopener">OpenStreetMap contributors</a>
-      under the ODbL. UK campus walkways are included as LTS
+      under the ODbL. UK academic-core walkways are included as LTS
       ${stats.osm_paths.campus_walkways?.rating ?? 1} because bicycles are
-      permitted on them. Where a campus walkway runs parallel to nearby
+      permitted on them. Where an academic-core walkway runs parallel to nearby
       on-road bike infrastructure, calm and balanced routes apply a
       ${campusFactor.toFixed(2)}× factor so the bike facility remains preferred.
-      Interior campus paths carry no such penalty, and Fastest remains shortest
-      distance.
+      Interior academic-core paths carry no such penalty, and Fastest remains
+      shortest distance.
       The reviewed Baptist access corridor is rated LTS
       ${stats.osm_paths.access_roads?.rating ?? 2}. Commonwealth Drive is a
       reviewed missing-street exception rated LTS

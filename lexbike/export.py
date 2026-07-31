@@ -417,6 +417,10 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
                 "segments": int(osm_campus_path.sum()),
                 "miles": round(float(miles[osm_campus_path].sum()), 1),
                 "rating": 1,
+                "scope": "academic core",
+                "boundary_source": params.get(
+                    "osm.academic_core_boundary_source", ""
+                ),
                 "parallel_bike_segments": int(
                     (osm_campus_path & campus_parallel_bike).sum()
                 ),

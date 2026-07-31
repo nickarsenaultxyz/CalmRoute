@@ -15,6 +15,9 @@ import json
 from pathlib import Path
 
 import pytest
+from shapely.geometry import Polygon, shape
+
+from lexbike.params import load as load_params
 
 DATA = Path("data")
 
@@ -256,6 +259,16 @@ def test_enabled_osm_build_preserves_provenance_and_access_policy(manifest, feat
     assert stats["osm_paths"]["reviewed_streets"]["miles"] > 0
     campus_stats = stats["osm_paths"]["campus_walkways"]
     assert campus_stats["campus_relation_id"] == 4815526
+    assert campus_stats["scope"] == "academic core"
+    assert all(
+        street in campus_stats["boundary_source"]
+        for street in (
+            "Rose Street",
+            "Washington Avenue",
+            "S Limestone Street",
+            "Avenue of Champions",
+        )
+    )
     assert campus_stats["rating"] == 1
     assert campus_stats["segments"] == len(campus)
     assert campus_stats["miles"] > 0
@@ -269,6 +282,10 @@ def test_enabled_osm_build_preserves_provenance_and_access_policy(manifest, feat
     assert all(f["properties"]["fac"] == 6 for f in campus)
     assert all("u" in f["properties"] and "v" in f["properties"] for f in campus), (
         "every published UK campus walkway must participate in routing"
+    )
+    core = Polygon(load_params()["osm.academic_core_polygon"]).buffer(0.00002)
+    assert all(core.covers(shape(f["geometry"])) for f in campus), (
+        "generic UK walkways must remain inside the academic core"
     )
 
 

@@ -92,7 +92,7 @@ export function render(props, { stats, aadtYear, council } = {}) {
             props.osm_role === 'reviewed_street'
               ? 'Reviewed-street data'
               : props.osm_role === 'campus_path'
-                ? 'UK campus walkway data'
+                ? 'UK academic-core walkway data'
               : props.fac ? 'Path data' : 'Access-road data',
             'OpenStreetMap contributors (ODbL)',
             '—',

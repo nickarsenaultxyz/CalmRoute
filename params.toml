@@ -384,13 +384,14 @@ barrier_min_island_segments = 3
 #  deployment, so the live map cannot silently fall back to LFUCG-only data.
 #
 #  The Fayette County query supplies cycleways and bicycle-designated paths.
-#  A separate, stable UK multipolygon supplies all non-private campus walkways;
-#  UK permits bicycles there even when OSM has no bicycle-specific tag.
+#  A reviewed four-street polygon supplies non-private walkways only within
+#  UK's academic core; UK permits bicycles there even when OSM has no
+#  bicycle-specific tag.
 #
 #  This is importable where OSM *streets* are not. A path separated from traffic
 #  is LTS 1 by definition, which is already how LFUCG paths are rated, so
 #  nothing has to be inferred and nothing is conflated onto a centreline.
-#  Untagged footways outside the UK relation remain excluded: almost all are
+#  Untagged footways outside the academic core remain excluded: almost all are
 #  ordinary sidewalks and have not received the same local review.
 #
 #  LICENSING: OpenStreetMap is ODbL. The map carries permanent attribution and
@@ -402,10 +403,21 @@ overpass_url = "https://overpass-api.de/api/interpreter"
 # Fayette County, Kentucky. Selecting on the name alone also matches Fayette
 # counties in several other states; the stable OSM relation id is unambiguous.
 relation_id = 130537
-# University of Kentucky campus multipolygon. This is intentionally an exact
-# relation id rather than a name query, which could match individual buildings,
-# POIs, or another institution after an OSM edit.
+# University of Kentucky campus multipolygon, retained as provenance for the
+# enclosing campus. Generic walkways are imported only inside the academic-core
+# polygon below.
 campus_relation_id = 4815526
+# UK defines the academic core as bounded by Rose Street, Washington Avenue,
+# South Limestone Street and Avenue of Champions. Clockwise corners follow
+# those four LFUCG street corridors. Geometry is clipped to this polygon after
+# download, so a way crossing the boundary cannot bring its outside tail along.
+academic_core_polygon = [
+  [-84.5080283, 38.0357406], # S Limestone / Washington Ave
+  [-84.5051538, 38.0342349], # east end of Washington at the Rose corridor
+  [-84.4997921, 38.0378381], # Rose St / Avenue of Champions
+  [-84.5038474, 38.0415376], # Avenue of Champions / S Limestone
+]
+academic_core_boundary_source = "UK academic core: Rose Street, Washington Avenue, S Limestone Street, and Avenue of Champions"
 fetch_timeout_s = 150
 fetch_attempts = 3
 
@@ -434,11 +446,11 @@ reviewed_street_connector_names = ["University Court"]
 # edit war cannot silently swing the "bike network" between builds.
 expect_min_miles = 10.0
 expect_max_miles = 40.0
-# The current campus relation contributes roughly 54 net-new walkway miles
-# after LFUCG overlap removal. This gate catches an empty/partial response and a
-# runaway boundary edit without making ordinary OSM refinements fail deployment.
-expect_min_campus_path_miles = 45.0
-expect_max_campus_path_miles = 70.0
+# The academic core contains roughly 8.5 raw walkway miles; LFUCG overlap
+# removal lowers the published total. This gate catches an empty/partial
+# response or an accidentally broadened query.
+expect_min_campus_path_miles = 3.0
+expect_max_campus_path_miles = 12.0
 expect_min_access_miles = 0.3
 expect_max_access_miles = 2.0
 expect_min_reviewed_street_miles = 0.6
@@ -518,8 +530,8 @@ simplify_residential = 0.00003
 "methodology.json" = 12
 "manifest.json" = 2
 
-# Budgets that apply when osm.enabled -- roughly 75 net-new OSM path miles,
-# including all UK campus walkways, land in the critical-path layer. Kept
+# Budgets that apply when osm.enabled -- supplementary OSM paths, including
+# UK academic-core walkways, land in the critical-path layer. Kept
 # separate so the default build still fails if it creeps past its own, much
 # tighter, limit.
 [export.budget_kb_osm]
