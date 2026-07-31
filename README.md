@@ -159,10 +159,11 @@ map. In addition, every non-private walking path inside the exact
 [University of Kentucky campus relation](https://www.openstreetmap.org/relation/4815526)
 is imported as LTS 1 because bicycles are permitted on those campus paths;
 explicit `bicycle=no` paths remain excluded. Untagged footways elsewhere in the
-county are not imported. Calm and balanced routing treats campus walkways as
-secondary links with a 1.20× cost factor, so parallel purpose-built bicycle
-infrastructure remains preferred while useful campus cut-throughs still work;
-the Fastest option remains literal shortest distance. The reviewed Baptist
+county are not imported. Calm and balanced routing treats a campus walkway as
+secondary only where it runs parallel to nearby on-road bicycle infrastructure,
+using a 1.50× cost factor so the road facility remains preferred. Interior
+campus cut-throughs retain their ordinary LTS 1 cost; the Fastest option remains
+literal shortest distance. The reviewed Baptist
 Health access corridor is rated
 LTS 2 and does not count as a bike facility. Commonwealth Drive, which is
 missing from LFUCG, is a separate locally reviewed exception rated LTS 1; its

@@ -11,7 +11,7 @@ import {
   addConnectorLayer, addLayers, addRouteLayers, addSources, hitLayers, setLtsVisible,
   setRoute, setRouteAccess, setRouteEndpoints, setSourceVisible,
 } from './layers.js?v=20260731-uk-campus-thin';
-import { clipToEnd } from './lib/graph.js?v=20260731-uk-campus';
+import { clipToEnd } from './lib/graph.js?v=20260731-road-near-bike';
 import { announce, easeTo, isCoarsePointer } from './lib/a11y.js';
 import {
   debounce, onPopState, read, write,
@@ -353,7 +353,7 @@ async function ensureGraph() {
       if (!context || !residential) {
         throw new Error('A map geometry layer required for routing did not load.');
       }
-      const { buildGraph } = await import('./lib/graph.js?v=20260731-uk-campus');
+      const { buildGraph } = await import('./lib/graph.js?v=20260731-road-near-bike');
       app.graph = buildGraph(raw);
       return app.graph;
     });
@@ -386,7 +386,7 @@ async function recomputeRoute() {
     return;
   }
   const { snapToNetwork } = await import('./lib/graph.js');
-  const dj = await import('./lib/dijkstra.js?v=20260731-bike-first');
+  const dj = await import('./lib/dijkstra.js?v=20260731-road-near-bike');
 
   const geometryOf = (id) => app.featuresById.get(id)?.geometry?.coordinates;
   const snapA = snapToNetwork(g, geometryOf, from.lng, from.lat);

@@ -24,6 +24,7 @@ from lexbike.conflate import (
     line_bearing,
     local_bearing_delta,
 )
+from lexbike.pipeline import mark_campus_parallel_bike_infrastructure
 
 
 def test_bearing_of_cardinal_directions():
@@ -326,3 +327,27 @@ def test_street_attachment_near_endpoint_snaps_to_endpoint():
         merge_m=0.75,
     )
     assert tuple(found[0][1].coords[0]) == tuple(target.coords[0])
+
+
+def test_only_parallel_nearby_campus_path_gets_road_preference():
+    frame = gpd.GeoDataFrame(
+        {
+            "kind": ["street", "facility", "facility", "facility"],
+            "fac": ["lane", "path", "path", "path"],
+            "osm_role": ["", "campus_path", "campus_path", "campus_path"],
+            "geometry": [
+                LineString([(0, 0), (100, 0)]),
+                LineString([(0, 10), (100, 10)]),       # nearby + parallel
+                LineString([(50, -50), (50, 50)]),      # nearby crossing
+                LineString([(0, 100), (100, 100)]),     # parallel but remote
+            ],
+        },
+        crs=32616,
+    )
+    marked = mark_campus_parallel_bike_infrastructure(
+        frame,
+        params_mod.load(),
+    )
+    assert marked["campus_parallel_bike"].tolist() == [
+        False, True, False, False,
+    ]

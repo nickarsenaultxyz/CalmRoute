@@ -24,7 +24,8 @@ import {
  */
 const byPenalty = (penalty) => (g, e) => {
   const p = penalty[g.eLts[e]];
-  const campus = g.eCampus?.[e] ? g.campusWalkwayFactor : 1;
+  const campus = g.eCampusParallelBike?.[e]
+    ? g.campusParallelBikeFactor : 1;
   return p === undefined || p === Infinity ? Infinity : g.eMi[e] * p * campus;
 };
 

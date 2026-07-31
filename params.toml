@@ -456,10 +456,15 @@ attribution = "Supplementary paths © OpenStreetMap contributors, ODbL"
 #  Routing preferences
 # ---------------------------------------------------------------------------
 [routing]
-# Campus walkways remain available for short, useful cut-throughs but should not
-# replace parallel purpose-built bicycle infrastructure in calm/balanced routes.
-# Fastest remains literal shortest distance and does not apply this factor.
-campus_walkway_factor = 1.20
+# A campus walkway is secondary only where it runs alongside on-road bicycle
+# infrastructure. Interior campus paths and useful cut-throughs keep their
+# ordinary LTS 1 cost.
+campus_bike_near_m = 30.0
+campus_bike_parallel_degrees = 30.0
+campus_bike_min_parallel_share = 0.50
+# Strong enough for an LTS 1 walkway to yield to a somewhat longer LTS 2 bike
+# facility. Fastest remains literal shortest distance and ignores this factor.
+campus_parallel_bike_factor = 1.50
 
 
 # ---------------------------------------------------------------------------

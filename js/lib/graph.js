@@ -16,7 +16,7 @@
 export function buildGraph(raw) {
   const n = raw.nodes.length;
   const m = raw.edges.length;
-  const campusWalkwayFactor = raw.campus_walkway_factor ?? 1.20;
+  const campusParallelBikeFactor = raw.campus_parallel_bike_factor ?? 1.50;
 
   const lon = new Float64Array(n);
   const lat = new Float64Array(n);
@@ -30,13 +30,13 @@ export function buildGraph(raw) {
   const eId = new Int32Array(m);
   const eMi = new Float32Array(m);      // distances, where f32 is plenty
   const eLts = new Uint8Array(m);
-  const eCampus = new Uint8Array(m);
+  const eCampusParallelBike = new Uint8Array(m);
 
   const deg = new Int32Array(n + 1);
   for (let e = 0; e < m; e++) {
-    const [u, v, id, mi, lts, campus = 0] = raw.edges[e];
+    const [u, v, id, mi, lts, campusParallelBike = 0] = raw.edges[e];
     eu[e] = u; ev[e] = v; eId[e] = id; eMi[e] = mi; eLts[e] = lts;
-    eCampus[e] = campus;
+    eCampusParallelBike[e] = campusParallelBike;
     deg[u]++; deg[v]++;
   }
 
@@ -51,8 +51,8 @@ export function buildGraph(raw) {
     to[cursor[ev[e]]] = eu[e]; via[cursor[ev[e]]++] = e;
   }
 
-  return { n, m, head, to, via, eu, ev, eId, eMi, eLts, eCampus,
-           campusWalkwayFactor, lon, lat,
+  return { n, m, head, to, via, eu, ev, eId, eMi, eLts,
+           eCampusParallelBike, campusParallelBikeFactor, lon, lat,
            grid: buildGrid(lon, lat, n) };
 }
 

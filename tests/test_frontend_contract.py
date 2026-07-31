@@ -259,6 +259,12 @@ def test_enabled_osm_build_preserves_provenance_and_access_policy(manifest, feat
     assert campus_stats["rating"] == 1
     assert campus_stats["segments"] == len(campus)
     assert campus_stats["miles"] > 0
+    parallel = [f for f in campus if f["properties"].get("cb") == 1]
+    assert 0 < len(parallel) < len(campus), (
+        "road preference must apply only to campus paths near bike facilities"
+    )
+    assert campus_stats["parallel_bike_segments"] == len(parallel)
+    assert campus_stats["parallel_bike_miles"] > 0
     assert all(f["properties"]["lts"] == 1 for f in campus)
     assert all(f["properties"]["fac"] == 6 for f in campus)
     assert all("u" in f["properties"] and "v" in f["properties"] for f in campus), (

@@ -20,6 +20,7 @@ from pathlib import Path
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from shapely import STRtree
 
 from . import conflate, council, export, io, network, osm as osm_mod
 from . import lts as lts_mod
@@ -155,6 +156,7 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
 
     log.info("--- stage 4/5: graph, islands, barriers ---")
     edges = assemble_edges(rated, paths, connectors, params)
+    edges = mark_campus_parallel_bike_infrastructure(edges, params)
     summarize(edges, params)
 
     graph, node_ids, pairs = network.build_graph(edges, params)
@@ -234,8 +236,8 @@ def write_artifacts(
     export.write_json(
         {
             "nodes": coords,
-            "campus_walkway_factor": float(
-                params["routing.campus_walkway_factor"]
+            "campus_parallel_bike_factor": float(
+                params["routing.campus_parallel_bike_factor"]
             ),
             "edges": [
                 [
@@ -245,11 +247,11 @@ def write_artifacts(
                 for u, v, i, m, l, campus in zip(
                     routable["u"], routable["v"], routable["id"],
                     routable["mi"], routable["lts"],
-                    routable["osm_role"].fillna("").eq("campus_path"),
+                    routable["campus_parallel_bike"].fillna(False),
                 )
             ],
             "edge_fields": [
-                "u", "v", "id", "miles", "lts", "campus_walkway",
+                "u", "v", "id", "miles", "lts", "campus_parallel_bike",
             ],
         },
         out_dir / "graph.json",
@@ -592,6 +594,75 @@ def assemble_edges(streets, paths, connectors, params: Params):
         int((out["kind"] == "street").sum()),
         int((out["kind"] == "facility").sum()),
         int((out["kind"] == "connector").sum()),
+    )
+    return out
+
+
+def mark_campus_parallel_bike_infrastructure(
+    edges: gpd.GeoDataFrame,
+    params: Params,
+) -> gpd.GeoDataFrame:
+    """Flag campus walkway pieces that parallel an on-road bike facility.
+
+    Proximity alone is insufficient: a campus path crossing a bike lane is a
+    useful connector, not a competing sidewalk. Require both sustained nearby
+    coverage and a similar local bearing. The browser applies its secondary
+    route cost only to the pieces flagged here.
+    """
+    out = edges.copy()
+    out["campus_parallel_bike"] = False
+
+    role = (
+        out["osm_role"].fillna("")
+        if "osm_role" in out.columns
+        else pd.Series("", index=out.index)
+    )
+    campus_indices = out.index[role.eq("campus_path")]
+    bike_indices = out.index[
+        out["kind"].eq("street")
+        & out["fac"].isin({"sharrow", "shoulder", "lane", "buffered", "protected"})
+    ]
+    if campus_indices.empty or bike_indices.empty:
+        return out
+
+    radius = float(params["routing.campus_bike_near_m"])
+    min_share = float(params["routing.campus_bike_min_parallel_share"])
+    max_delta = float(params["routing.campus_bike_parallel_degrees"])
+    work = io.to_working_crs(out, params)
+    bike_geoms = work.loc[bike_indices].geometry.to_numpy()
+    tree = STRtree(bike_geoms)
+
+    flagged = []
+    for edge_index in campus_indices:
+        path = work.at[edge_index, "geometry"]
+        if path.length <= 0:
+            continue
+        for candidate_position in tree.query(path.buffer(radius)):
+            street = bike_geoms[int(candidate_position)]
+            street_corridor = street.buffer(radius)
+            share = path.intersection(street_corridor).length / path.length
+            if share < min_share:
+                continue
+            delta = conflate.local_bearing_delta(
+                street,
+                path,
+                street_corridor,
+                path.buffer(radius),
+            )
+            if delta is not None and delta <= max_delta:
+                flagged.append(edge_index)
+                break
+
+    out.loc[flagged, "campus_parallel_bike"] = True
+    miles = (
+        float(work.loc[flagged].geometry.length.sum()) / 1609.344
+        if flagged else 0.0
+    )
+    log.info(
+        "routing preference: %d campus walkway pieces (%.1f mi) parallel "
+        "nearby on-road bike infrastructure",
+        len(flagged),
+        miles,
     )
     return out
 

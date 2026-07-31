@@ -37,9 +37,9 @@ def features_by_id():
 def test_edge_field_order_matches_the_client(graph):
     """js/lib/graph.js destructures graph edge fields positionally."""
     assert graph["edge_fields"] == [
-        "u", "v", "id", "miles", "lts", "campus_walkway",
+        "u", "v", "id", "miles", "lts", "campus_parallel_bike",
     ]
-    assert graph["campus_walkway_factor"] > 1
+    assert graph["campus_parallel_bike_factor"] > 1
 
 
 def test_every_edge_endpoint_is_a_real_node(graph):
@@ -65,15 +65,17 @@ def test_lts_values_have_a_routing_penalty(graph):
     assert {e[4] for e in graph["edges"]} <= {0, 1, 2, 3, 4}
 
 
-def test_only_uk_walkways_receive_the_secondary_route_flag(
+def test_only_parallel_uk_walkways_receive_the_secondary_route_flag(
     graph, features_by_id,
 ):
     for edge in graph["edges"]:
-        expected = int(
-            features_by_id[edge[2]]["properties"].get("osm_role")
-            == "campus_path"
-        )
+        expected = int(features_by_id[edge[2]]["properties"].get("cb") == 1)
         assert edge[5] == expected
+        if edge[5]:
+            assert (
+                features_by_id[edge[2]]["properties"].get("osm_role")
+                == "campus_path"
+            )
 
 
 def test_edge_ids_resolve_to_drawable_features(graph):
