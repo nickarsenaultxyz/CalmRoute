@@ -1,6 +1,7 @@
 # Core data analysis
 numpy>=1.24.0
 pandas>=2.0.0
+scikit-learn>=1.5,<2
 
 # Geospatial
 geopandas>=0.14.0

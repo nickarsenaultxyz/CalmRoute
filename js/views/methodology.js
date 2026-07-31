@@ -71,8 +71,11 @@ export function render(methodology, stats) {
     <h2 class="section">How sure is it?</h2>
     <p>Only <b>${stats?.data_sources?.aadt_measured_pct ?? '~15'}%</b> of streets
       have a measured traffic count. The state counts the roads it maintains,
-      which are mostly the busy ones, so volumes for neighbourhood streets are
-      estimated from similar streets — and those estimates run high.</p>
+      which are mostly the busy ones. A route-group validated model estimates
+      comparable larger roads; neighbourhood and unsupported streets retain
+      conservative class-median estimates. The model currently supplies
+      <b>${stats?.data_sources?.aadt_model_pct ?? 0}%</b> of published street
+      estimates.</p>
     ${conf ? `<p>Of the mileage rated comfortable:
       <b>${conf.high}%</b> high confidence, <b>${conf.medium}%</b> medium,
       <b>${conf.low}%</b> low.</p>` : ''}

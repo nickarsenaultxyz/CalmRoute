@@ -152,13 +152,35 @@ impute_groups = [
 ]
 impute_floor = 500
 
-# KYTC only counts state-maintained routes, so observed medians are drawn from
-# the busiest third of each class. Including MAINTENANCE in the first group key
-# is a partial correction, not a cure. Segments resting on a coarse imputation
-# ship with cf=0 (low confidence) and the UI says so.
+# KYTC only counts a biased subset of roads. A validated gradient-boosting
+# model is used for represented road classes/categories; the median cascade
+# remains the fallback for neighbourhood streets and out-of-domain values.
+# Segments resting on a coarse imputation ship with cf=0 (low confidence).
 bias_note = """KYTC traffic counts exist only on state-maintained routes. \
-Volumes for local streets are imputed from class medians and are estimates, \
-not measurements."""
+Where count coverage is representative, estimates use a route-group validated \
+gradient-boosting model; local streets retain class-median estimates. Neither \
+kind of estimate is a measurement."""
+
+[aadt.model]
+enabled = true
+# Classes 6-8 are predominantly neighbourhood, private or service streets and
+# are badly underrepresented in KYTC counts. Using the model there predicts the
+# count programme's selection bias rather than local traffic.
+eligible_rdclasses = [1, 2, 3, 4, 5]
+min_station_keys = 100
+min_category_station_keys = 5
+max_aadt = 110000
+cv_folds = 5
+# Predict the conditional 75th percentile rather than the median. On held-out
+# routes this halves dangerous low-bin errors (3.1% vs 6.4%) while retaining a
+# lower RMSLE than the class-median fallback.
+quantile = 0.75
+max_iter = 250
+learning_rate = 0.05
+max_leaf_nodes = 15
+min_samples_leaf = 12
+l2_regularization = 2.0
+random_state = 42
 
 
 # ---------------------------------------------------------------------------

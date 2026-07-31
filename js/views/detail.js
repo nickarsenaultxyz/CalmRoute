@@ -1,7 +1,7 @@
 /**
  * Segment detail.
  *
- * Designed around the fact that 85% of segments have no measured traffic count.
+ * Designed around the fact that most segments have no measured traffic count.
  * The previous map rendered an empty table cell for those, which reads as "no
  * traffic" rather than "not measured". Here an unknown is always labelled, and
  * the `basis` chip says in plain language what the rating actually rests on.
@@ -21,6 +21,11 @@ const BASIS_NOTE = {
   2: 'Rated from the street type, posted speed and a measured traffic count.',
 };
 
+const MODEL_BASIS_NOTE =
+  'Rated from the street type and posted speed. No traffic count is available '
+  + 'for this street, so the volume is a conservative estimate from a model '
+  + 'validated on held-out routes.';
+
 function fact(label, value, unknownText) {
   if (value == null || value === '') {
     return `<tr><th>${label}</th><td class="unknown">${unknownText}</td></tr>`;
@@ -32,7 +37,9 @@ export function render(props, { stats, aadtYear, council } = {}) {
   const lts = LTS[props.lts] || LTS[4];
   const name = props.nm || 'Unnamed street';
   const conf = CONFIDENCE[props.cf ?? 1];
-  const basis = BASIS_NOTE[props.basis ?? 1];
+  const basis = props.am === 1
+    ? MODEL_BASIS_NOTE
+    : BASIS_NOTE[props.basis ?? 1];
 
   const facility = FAC_PUBLIC[props.fac ?? 0];
   const kind = KIND_PUBLIC[props.kind ?? 0];

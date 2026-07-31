@@ -1,6 +1,6 @@
 # Sensitivity of the LTS results to parameter choices
 
-Ruleset 2.0.0 (digest `00084cd7881f`).
+Ruleset 2.0.0 (digest `1b07001fd85c`).
 Regenerate with `make sensitivity`.
 
 Several thresholds in this model are judgement calls, not measurements.
@@ -9,13 +9,13 @@ choice and see immediately how much it would change.
 
 | variant | low-stress mi | islands | largest island | share | LTS<=3 mi | segments changed |
 |---|--:|--:|--:|--:|--:|--:|
-| `baseline` | 948.2 | 934 | 178.1 mi | 18.8% | 1249.4 | 0 |
-| `mixed_35mph_as_lts2` | 1135.5 | 505 | 670.0 mi | 59.0% | 1249.4 | 1646 |
-| `aadt_break_2000` | 943.9 | 955 | 175.3 mi | 18.6% | 1249.4 | 54 |
-| `aadt_break_5000` | 1030.3 | 614 | 264.9 mi | 25.7% | 1249.4 | 1014 |
-| `conflation_buffer_20m` | 950.7 | 935 | 178.2 mi | 18.7% | 1250.5 | 34 |
-| `connector_15m` | 948.2 | 947 | 177.0 mi | 18.7% | 1249.4 | 266 |
-| `connector_40m` | 948.2 | 907 | 188.0 mi | 19.8% | 1249.4 | 285 |
+| `baseline` | 948.2 | 934 | 178.2 mi | 18.8% | 1249.4 | 0 |
+| `mixed_35mph_as_lts2` | 1135.5 | 505 | 670.1 mi | 59.0% | 1249.4 | 1646 |
+| `aadt_break_2000` | 943.9 | 955 | 175.4 mi | 18.6% | 1249.4 | 54 |
+| `aadt_break_5000` | 997.9 | 750 | 234.6 mi | 23.5% | 1249.4 | 627 |
+| `conflation_buffer_20m` | 950.7 | 935 | 178.3 mi | 18.8% | 1250.5 | 34 |
+| `connector_15m` | 948.2 | 947 | 177.1 mi | 18.7% | 1249.4 | 268 |
+| `connector_40m` | 948.2 | 907 | 188.1 mi | 19.8% | 1249.4 | 289 |
 
 ## What each variant tests
 
@@ -36,7 +36,7 @@ gate, so the sweep could not explore that direction.
 
 ## How this feeds the map
 
-3005 segments change LTS under at least one variant. Those are
+2632 segments change LTS under at least one variant. Those are
 marked low-confidence in the published data, so the map can distinguish a
 rating that is robust from one that rests on a contested threshold.
 

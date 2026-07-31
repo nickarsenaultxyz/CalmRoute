@@ -15,9 +15,9 @@ export function miles(n) {
  *
  * Rounded because an imputed 4,837 implies a precision that does not exist.
  *
- * `measured` is what keeps this honest. Only 15% of segments have a real KYTC
- * count; the rest are imputed from class medians. Appending "(2023 count)" to
- * an imputed value -- which an earlier version did, because a count year was
+ * `measured` is what keeps this honest. About 13% of segments have a real KYTC
+ * count; the rest are modelled or imputed from class medians. Appending
+ * "(2023 count)" to an estimated value -- which an earlier version did because a count year was
  * available globally -- puts "About 900 vehicles/day (2023 count)" directly
  * above a note saying no count exists for this street. Dating a number is only
  * honest when the number was actually measured.

@@ -272,6 +272,7 @@ def load_aadt(params: Params, path: Path = AADT_PATH) -> pd.Series:
 AADT_STATION = 0
 AADT_IMPUTED_NARROW = 1
 AADT_IMPUTED_COARSE = 2
+AADT_IMPUTED_MODEL = 3
 
 
 def attach_aadt(
@@ -279,10 +280,11 @@ def attach_aadt(
 ) -> gpd.GeoDataFrame:
     """Resolve a traffic volume for every segment, recording how.
 
-    Two-part policy replacing the old code's per-branch improvisation:
+    Three-part policy replacing the old code's per-branch improvisation:
 
     1. Join real counts on the KYDOT route key.
-    2. Impute the rest from group medians, cascading to progressively coarser
+    2. Use the validated model where the count sample represents the road.
+    3. Impute the rest from group medians, cascading to progressively coarser
        keys, so no segment reaches the classifier with an unresolved volume.
 
     ``aadt_src`` records which happened, and it drives the confidence field and
@@ -302,6 +304,26 @@ def attach_aadt(
         log.info(
             "AADT: matched %d / %d segments to a count station via KYDOT",
             int(matched.notna().sum()), len(gdf),
+        )
+    else:
+        key = pd.Series("", index=gdf.index, dtype="string")
+        matched = pd.Series(pd.NA, index=gdf.index, dtype="Float64")
+
+    if bool(params.get("aadt.model.enabled", False)) and matched.notna().any():
+        from . import aadt_model
+
+        prediction = aadt_model.predict(gdf, key, matched, params)
+        model_fill = (
+            gdf["aadt"].isna()
+            & prediction.supported
+            & prediction.values.notna()
+        )
+        gdf.loc[model_fill, "aadt"] = prediction.values.loc[model_fill]
+        gdf.loc[model_fill, "aadt_src"] = AADT_IMPUTED_MODEL
+        log.info(
+            "AADT model: predicted %d segments inside the supported domain "
+            "(%d independent station keys)",
+            int(model_fill.sum()), prediction.station_keys,
         )
 
     groups: list[list[str]] = [list(g) for g in params["aadt.impute_groups"]]
@@ -343,12 +365,33 @@ def attach_aadt(
 
     breakdown = gdf["aadt_src"].value_counts().sort_index().to_dict()
     log.info(
-        "AADT provenance: station=%d narrow=%d coarse=%d",
+        "AADT provenance: station=%d model=%d narrow=%d coarse=%d",
         breakdown.get(AADT_STATION, 0),
+        breakdown.get(AADT_IMPUTED_MODEL, 0),
         breakdown.get(AADT_IMPUTED_NARROW, 0),
         breakdown.get(AADT_IMPUTED_COARSE, 0),
     )
     return gdf
+
+
+def aadt_route_groups(
+    params: Params, path: Path = AADT_PATH
+) -> pd.Series:
+    """Route name per station key, used for leakage-resistant validation."""
+    if not path.exists():
+        return pd.Series(dtype="string")
+    frame = pd.read_csv(path)
+    frame["AADT"] = pd.to_numeric(frame["AADT"], errors="coerce")
+    frame = frame.dropna(subset=["AADT"])
+    n = int(params["aadt.station_key_chars"])
+    frame["__key"] = (
+        frame["Sta ID"].astype("string").str.strip().str[-n:]
+    )
+    return (
+        frame.drop_duplicates("__key")
+        .set_index("__key")["Route"]
+        .astype("string")
+    )
 
 
 def aadt_years(path: Path = AADT_PATH) -> dict[str, int]:

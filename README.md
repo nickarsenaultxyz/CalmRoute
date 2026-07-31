@@ -45,16 +45,25 @@ distinct facts a rider needs, so they are now `0` and `4`.
 
 ## How honest is it?
 
-Only **15% of segments have a measured traffic count**. KYTC counts
-state-maintained routes, so volumes on local streets are imputed from class
-medians drawn from the busiest third of each class — which biases them high.
+Only **about 13% of published segments have a measured traffic count**. KYTC counts
+state-maintained routes, so the pipeline uses a route-group validated histogram
+gradient-boosting model only for represented road classes and feature values.
+Neighbourhood streets remain on the transparent class-median fallback rather
+than letting the model learn KYTC's sampling bias.
+
+The safety-facing estimate is the conditional 75th percentile, not the raw
+median. On held-out routes in represented road classes, it improves RMSLE from
+1.047 to 0.705, median absolute percentage error from 42.2% to 39.6%, and the
+LTS-relevant AADT-bin accuracy from 79.1% to 81.3%. More importantly, dangerous
+low-bin errors fall to 3.1%, versus 6.4% for the model median. Repeated segments
+sharing a count station are weighted as one observation during training.
 
 Every segment therefore ships with:
 
 - **`basis`** — whether its rating rests on facility type alone, on type and
   posted speed, or on type, speed and a real traffic count.
-- **`cf`** — confidence. A segment is demoted to *low* if its volume is coarsely
-  imputed **or** if its rating flips under any variant in the sensitivity sweep.
+- **`cf`** — confidence. A segment is demoted to *low* if its volume is a coarse
+  fallback **or** if its rating flips under any variant in the sensitivity sweep.
   That second condition makes "uncertain" mechanical rather than asserted.
 
 Of low-stress mileage: **6.5% high confidence, 74.1% medium, 19.4% low.**
