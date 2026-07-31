@@ -39,6 +39,30 @@ def test_generic_service_roads_need_explicit_bicycle_permission():
     assert _role({"highway": "service", "bicycle": "yes"}) == "access"
 
 
+def test_only_named_reviewed_streets_receive_the_reviewed_role():
+    reviewed = {"Commonwealth Drive", "University Court"}
+    assert _role({
+        "highway": "residential",
+        "maxspeed": "25 mph",
+        "name": "Commonwealth Drive",
+        "oneway": "yes",
+    }, reviewed) == "reviewed_street"
+    assert _role({
+        "highway": "residential",
+        "name": "University Court",
+    }, reviewed) == "reviewed_street"
+    assert _role({
+        "highway": "residential",
+        "maxspeed": "25 mph",
+        "name": "Unreviewed Drive",
+    }, reviewed) is None
+    assert _role({
+        "highway": "residential",
+        "name": "Commonwealth Drive",
+        "access": "private",
+    }, reviewed) is None
+
+
 def test_unnamed_access_continuations_are_kept_only_when_connected_to_seed():
     rows = [
         {

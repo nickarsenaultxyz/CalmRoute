@@ -130,9 +130,10 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
 
     streets = conflate.conflate_on_road(streets, existing, params)
 
-    # Supplementary OSM paths and explicitly bicycle-authorized service roads,
-    # if enabled. They join the same geometry attachment pipeline rather than a
-    # parallel graph; access roads receive no bike-facility credit below.
+    # Supplementary OSM paths, explicitly bicycle-authorized service roads and
+    # narrowly reviewed missing streets, if enabled. They join the same geometry
+    # attachment pipeline rather than a parallel graph; street exceptions
+    # receive no bike-facility credit below.
     off_road_input = existing
     osm_paths = osm_mod.fetch(params)
     if osm_paths is not None:
@@ -502,22 +503,27 @@ def assemble_edges(streets, paths, connectors, params: Params):
             else pd.Series("path", index=p.index)
         )
         access = role == "access"
-        p["kind"] = np.where(access, "street", "facility")
-        # Paths and access links have no LFUCG traffic record. An explicitly
-        # bicycle-authorized service road receives its reviewed configured
-        # rating and is not presented or counted as a bike facility.
+        reviewed_street = role == "reviewed_street"
+        street_like = access | reviewed_street
+        p["kind"] = np.where(street_like, "street", "facility")
+        # Paths and street exceptions have no LFUCG traffic record. Each street
+        # exception receives its reviewed configured rating and is not presented
+        # or counted as a bike facility.
         p["rdclass"] = 6
         p["lanes"] = 1
         p["speed_mph"] = pd.NA
         p["aadt"] = pd.NA
         p["aadt_src"] = io.AADT_IMPUTED_COARSE
         p["road_name"] = p.get("network_name", pd.Series(dtype="string"))
-        p["lts"] = np.where(
-            access,
-            int(params["osm.access_lts"]),
-            rules.path_lts if "path" in rules.facility_rank else 1,
+        p["lts"] = np.select(
+            [access, reviewed_street],
+            [
+                int(params["osm.access_lts"]),
+                int(params["osm.reviewed_street_lts"]),
+            ],
+            default=rules.path_lts if "path" in rules.facility_rank else 1,
         )
-        p["fac"] = np.where(access, "none", "path")
+        p["fac"] = np.where(street_like, "none", "path")
         frames.append(p)
 
     if len(connectors):

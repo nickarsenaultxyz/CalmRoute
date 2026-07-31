@@ -103,10 +103,21 @@ def test_enabled_osm_build_preserves_provenance_and_access_policy(manifest, feat
         pytest.skip("OSM supplement disabled for this build")
 
     osm = [f for f in features if f["properties"].get("src") == "osm"]
-    paths = [f for f in osm if f["properties"]["fac"] == 6]
-    access = [f for f in osm if f["properties"]["fac"] == 0]
+    paths = [
+        f for f in osm
+        if f["properties"].get("osm_role") == "path"
+    ]
+    access = [
+        f for f in osm
+        if f["properties"].get("osm_role") == "access"
+    ]
+    reviewed = [
+        f for f in osm
+        if f["properties"].get("osm_role") == "reviewed_street"
+    ]
     assert paths, "an OSM-enabled build must export auditable path provenance"
     assert access, "explicitly bicycle-authorized access roads must reach the graph"
+    assert reviewed, "reviewed missing streets must reach the graph"
     access_rating = stats["osm_paths"]["access_roads"]["rating"]
     assert access_rating == 2
     assert all(f["properties"]["lts"] == access_rating for f in access)
@@ -116,6 +127,16 @@ def test_enabled_osm_build_preserves_provenance_and_access_policy(manifest, feat
     assert "Baptist Health Entrance 1" in names
     assert stats["osm_paths"]["access_roads"]["segments"] == len(access)
     assert stats["osm_paths"]["access_roads"]["miles"] > 0
+
+    reviewed_rating = stats["osm_paths"]["reviewed_streets"]["rating"]
+    assert reviewed_rating == 1
+    assert all(f["properties"]["lts"] == reviewed_rating for f in reviewed)
+    assert all(f["properties"]["fac"] == 0 for f in reviewed)
+    assert all(f["properties"]["kind"] == 0 for f in reviewed)
+    reviewed_names = {f["properties"].get("nm") for f in reviewed}
+    assert {"Commonwealth Drive", "University Court"} <= reviewed_names
+    assert stats["osm_paths"]["reviewed_streets"]["segments"] == len(reviewed)
+    assert stats["osm_paths"]["reviewed_streets"]["miles"] > 0
 
 
 def test_baptist_health_cut_through_is_routable(manifest, features):
@@ -136,7 +157,7 @@ def test_baptist_health_cut_through_is_routable(manifest, features):
     access_ids = {
         f["id"] for f in features
         if f["properties"].get("src") == "osm"
-        and f["properties"].get("fac") == 0
+        and f["properties"].get("osm_role") == "access"
     }
     access_adj = {}
     access_edge_by_id = {}
@@ -208,6 +229,60 @@ def test_baptist_health_cut_through_is_routable(manifest, features):
     assert nearest * 1609.344 <= 15, (
         f"Baptist access is {nearest * 1609.344:.1f} m by graph from "
         "Hiltonia Park despite a roughly 9 m physical gap"
+    )
+
+
+def test_commonwealth_drive_is_lts1_and_joins_the_graph(manifest, features):
+    reviewed = [
+        f for f in features
+        if f["properties"].get("osm_role") == "reviewed_street"
+    ]
+    commonwealth = [
+        f for f in reviewed
+        if f["properties"].get("nm") == "Commonwealth Drive"
+    ]
+    if not commonwealth:
+        pytest.skip("reviewed OSM street supplement disabled for this build")
+
+    assert all(f["properties"]["lts"] == 1 for f in commonwealth)
+    assert sum(f["properties"]["mi"] for f in commonwealth) >= 0.5
+
+    graph = load(manifest["files"]["graph"])
+    reviewed_ids = {f["id"] for f in reviewed}
+    commonwealth_ids = {f["id"] for f in commonwealth}
+    reviewed_adj = {}
+    all_adj = {}
+    reviewed_graph_ids = set()
+    for u, v, edge_id, *_ in graph["edges"]:
+        all_adj.setdefault(u, []).append((v, edge_id))
+        all_adj.setdefault(v, []).append((u, edge_id))
+        if edge_id in reviewed_ids:
+            reviewed_graph_ids.add(edge_id)
+            reviewed_adj.setdefault(u, []).append((v, edge_id))
+            reviewed_adj.setdefault(v, []).append((u, edge_id))
+
+    assert commonwealth_ids <= reviewed_graph_ids
+    seed = next(iter(reviewed_adj))
+    seen_nodes = {seed}
+    seen_edges = set()
+    frontier = [seed]
+    while frontier:
+        node = frontier.pop()
+        for neighbour, edge_id in reviewed_adj.get(node, []):
+            seen_edges.add(edge_id)
+            if neighbour not in seen_nodes:
+                seen_nodes.add(neighbour)
+                frontier.append(neighbour)
+
+    assert commonwealth_ids <= seen_edges, (
+        "all Commonwealth Drive pieces must form one continuous corridor"
+    )
+    exits = {
+        node for node in seen_nodes
+        if any(edge_id not in reviewed_ids for _, edge_id in all_adj.get(node, []))
+    }
+    assert len(exits) >= 2, (
+        "Commonwealth Drive must join the wider routing graph at both ends"
     )
 
 
