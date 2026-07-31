@@ -29,8 +29,10 @@ export class Panel {
 
   /** Replace the panel contents. `root` is true for a top-level view, which
    *  hides the back affordance. */
-  show({ title, html, root = false, onMount } = {}) {
+  show({ title, html, root = false, view = '', onMount } = {}) {
     this.title.textContent = title;
+    if (view) this.el.dataset.view = view;
+    else delete this.el.dataset.view;
     this.body.innerHTML = html;
     this.backBtn.hidden = root;
     this.body.scrollTop = 0;

@@ -107,6 +107,36 @@ def test_location_search_is_submit_only_bounded_and_rate_limited():
     assert "OpenStreetMap" in view and "Nominatim" in view
 
 
+def test_calmroute_home_uses_maplibre_and_real_graph_results_only():
+    """The supplied design is a layout reference, not a source of route data.
+
+    Keep the production renderer on MapLibre and calculate every comparison
+    card from the published graph. The reference's sample rider reports,
+    accounts, climb figures, and Leaflet runtime must never leak into the app.
+    """
+    index = Path("index.html").read_text()
+    state = Path("js/lib/urlstate.js").read_text()
+    main = Path("js/main.js").read_text()
+    view = Path("js/views/route.js").read_text()
+
+    assert "view: 'route'" in state
+    assert "maplibre-gl-5.24.0" in index
+    assert "leaflet" not in index.lower()
+
+    for key, mode in (
+        ("calmest", "quiet"),
+        ("balanced", "balanced"),
+        ("fastest", "shortest"),
+    ):
+        assert f"key: '{key}'" in main
+        assert f"mode: '{mode}'" in main
+    assert "routeBetweenSnaps(g, dj, snapA, snapB, spec.mode)" in main
+    assert "routeSegments(raw, snapA, snapB)" in main
+
+    for sample_only in ("Rider reports", "Climb", "Start ride", "avatar"):
+        assert sample_only not in view
+
+
 # --------------------------------------------------------------------------
 #  stats — js/views/legend.js reads these exact paths
 # --------------------------------------------------------------------------

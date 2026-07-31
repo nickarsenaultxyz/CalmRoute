@@ -14,7 +14,7 @@
  * page reads as a wall of blue, which makes route conditions and dedicated bike
  * facilities harder to distinguish. Off by default, one tap to bring back.
  */
-const DEFAULTS = { view: 'legend', basemap: 'light', residential: false };
+const DEFAULTS = { view: 'route', basemap: 'light', residential: false };
 
 export function read() {
   const p = new URLSearchParams(location.search);
