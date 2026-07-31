@@ -89,6 +89,18 @@ def test_tree_is_a_copy():
     assert p["lts.low_stress_max"] == 2
 
 
+def test_reviewed_connectors_are_narrowly_scoped():
+    p = params_mod.load()
+    connectors = p["conflation.reviewed_connectors"]
+
+    assert len(connectors) == 2
+    assert {c["target_street"] for c in connectors} == {
+        "S MILL ST", "COLFAX ST",
+    }
+    assert all(len(c["source"]) == 2 for c in connectors)
+    assert max(c["max_m"] for c in connectors) <= 90
+
+
 def test_sensitivity_runs_reference_real_parameters():
     """Every sweep variant must be applicable, or the sweep is a no-op."""
     p = params_mod.load()

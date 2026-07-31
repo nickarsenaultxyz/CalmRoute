@@ -184,6 +184,10 @@ def _feature(row, decimals: int) -> dict:
         if role is not None and not pd.isna(role):
             props["osm_role"] = str(role)
 
+    reviewed = row.get("connector_reviewed")
+    if reviewed is not None and not pd.isna(reviewed) and bool(reviewed):
+        props["rv"] = 1
+
     return {
         "type": "Feature",
         "id": int(row["id"]),

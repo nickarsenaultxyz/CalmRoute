@@ -586,10 +586,18 @@ def build_off_road(
                     "split_y": float(snapped.y),
                 })
 
+    # A very small number of longer campus cut-throughs have been reviewed from
+    # the map and configured explicitly. Keep them out of `connector_max_m`:
+    # raising the citywide search radius to reach an 87 m campus connection
+    # would create hundreds of unreviewed shortcuts across blocks and parcels.
+    reviewed = _reviewed_connectors(off, candidates, params)
+    connectors.extend(reviewed)
+
     log.info(
         "off-road: %d paths -> %d pieces, %d attachment points, %d connectors "
-        "(max %.0f m, interior spacing %.0f m)",
-        len(off), len(path_rows), attach_count, len(connectors), max_m, spacing_m,
+        "(%d reviewed; automatic max %.0f m, interior spacing %.0f m)",
+        len(off), len(path_rows), attach_count, len(connectors), len(reviewed),
+        max_m, spacing_m,
     )
     if len(off) and attach_count == 0:
         raise ConflationError(
@@ -622,3 +630,90 @@ def build_off_road(
         paths_out.to_crs(streets.crs),
         conn_out.to_crs(streets.crs) if len(conn_out) else conn_out,
     )
+
+
+def _reviewed_connectors(
+    paths: gpd.GeoDataFrame,
+    streets: gpd.GeoDataFrame,
+    params: Params,
+) -> list[dict]:
+    """Build only the path-to-street links explicitly listed in params.
+
+    A configured source coordinate identifies an existing path endpoint within
+    three metres; it never becomes geometry itself. Using the real endpoint
+    preserves exact graph topology when upstream OSM coordinates carry more
+    precision than the human-reviewed configuration. The target is the nearest
+    segment of one named LFUCG street and must remain within the per-link cap.
+    """
+    specs = params.get("conflation.reviewed_connectors", [])
+    if not specs:
+        return []
+
+    source_points = gpd.GeoSeries(
+        [Point(spec["source"]) for spec in specs],
+        crs=4326,
+    ).to_crs(paths.crs)
+
+    endpoint_rows: list[tuple[Point, int]] = []
+    for path_row, geom in enumerate(paths.geometry):
+        for part in getattr(geom, "geoms", [geom]):
+            coords = list(part.coords)
+            if len(coords) >= 2:
+                endpoint_rows.extend([
+                    (Point(coords[0]), path_row),
+                    (Point(coords[-1]), path_row),
+                ])
+
+    out = []
+    for spec, requested in zip(specs, source_points):
+        name = str(spec["name"])
+        target_name = str(spec["target_street"])
+        max_m = float(spec["max_m"])
+
+        if not endpoint_rows:
+            raise ConflationError(
+                f"reviewed connector {name!r}: no path endpoints are available"
+            )
+        source, path_row = min(
+            endpoint_rows, key=lambda item: item[0].distance(requested))
+        source_gap = source.distance(requested)
+        if source_gap > 3.0:
+            raise ConflationError(
+                f"reviewed connector {name!r}: configured source is "
+                f"{source_gap:.1f} m from the nearest path endpoint"
+            )
+
+        matches = streets[streets["road_name"] == target_name]
+        if matches.empty:
+            raise ConflationError(
+                f"reviewed connector {name!r}: target street "
+                f"{target_name!r} is unavailable"
+            )
+        target_pos = min(
+            matches.index, key=lambda i: matches.at[i, "geometry"].distance(source))
+        target_line = matches.at[target_pos, "geometry"]
+        snapped = target_line.interpolate(target_line.project(source))
+        gap = source.distance(snapped)
+        if gap > max_m:
+            raise ConflationError(
+                f"reviewed connector {name!r}: target moved to {gap:.1f} m "
+                f"(reviewed maximum {max_m:.1f} m)"
+            )
+
+        out.append({
+            "geometry": LineString([(source.x, source.y), (snapped.x, snapped.y)]),
+            "fac": "connector",
+            "length_m": float(gap),
+            "path_row": int(path_row),
+            "split_street_id": int(matches.at[target_pos, "id"]),
+            "split_x": float(snapped.x),
+            "split_y": float(snapped.y),
+            "connector_reviewed": True,
+            "connector_name": name,
+        })
+        log.info(
+            "reviewed connector: %s (%.1f m to %s)",
+            name, gap, target_name,
+        )
+
+    return out
