@@ -86,6 +86,21 @@ def test_router_waits_for_every_geometry_layer_before_drawing():
     assert "route feature geometry missing" in source
 
 
+def test_router_uses_one_cache_key_for_its_graph_runtime():
+    """A returning browser must not combine old and new graph modules.
+
+    GitHub Pages caches assets for ten minutes. Importing ``graph.js`` once
+    with a version and once without one let the new route UI receive an older
+    module that had no ``snapToNetwork`` export.
+    """
+    main = Path("js/main.js").read_text()
+    index = Path("index.html").read_text()
+
+    assert "import('./lib/graph.js')" not in main
+    assert "from './lib/graph.js?v=20260731-routing-runtime'" in main
+    assert 'src="./js/main.js?v=20260731-routing-runtime"' in index
+
+
 def test_location_search_is_submit_only_bounded_and_rate_limited():
     """The route geocoder must obey the public Nominatim usage policy.
 
