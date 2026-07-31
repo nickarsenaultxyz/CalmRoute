@@ -113,6 +113,33 @@ def bearing_delta(a: float | None, b: float | None) -> float | None:
     return min(d, 180.0 - d)
 
 
+def local_bearing_delta(
+    street,
+    facility,
+    street_corridor,
+    facility_corridor,
+) -> float | None:
+    """Alignment where a facility and street are actually near one another.
+
+    Facility records are often much longer than centreline blocks. Comparing a
+    short block with the bearing of an entire curved facility is invalid: the
+    mean bearing of a loop can be nearly perpendicular to the tangent beside
+    that block. Beaumont Centre Circle exposed this as alternating facility/no-
+    facility ratings even though one source record continuously covers the
+    road.
+
+    Clip both lines to their shared local corridor before comparing them. A
+    genuinely perpendicular crossing remains perpendicular, while a long curve
+    is judged from the portion beside this specific centreline.
+    """
+    street_local = street.intersection(facility_corridor)
+    facility_local = facility.intersection(street_corridor)
+    return bearing_delta(
+        line_bearing(street_local),
+        line_bearing(facility_local),
+    )
+
+
 # ---------------------------------------------------------------------------
 #  On-road conflation
 # ---------------------------------------------------------------------------
@@ -159,11 +186,8 @@ def conflate_on_road(
     if on_road.empty:
         raise ConflationError("no treated on-road facilities to conflate")
 
-    fac_bearing = np.array([line_bearing(g) or np.nan for g in on_road.geometry])
     fac_buffers = on_road.geometry.buffer(buffer_m)
     tree = STRtree(fac_buffers.values)
-
-    st_bearing = np.array([line_bearing(g) or np.nan for g in st.geometry])
 
     assigned: list[str] = []
     source_ids: list[list[int]] = []
@@ -190,12 +214,21 @@ def conflate_on_road(
             source_ids.append([])
             continue
 
-        # Keep only candidates running roughly parallel to this centreline.
+        # Keep only candidates running roughly parallel *where the two records
+        # overlap*. A facility can be a long curve or loop, so its whole-record
+        # mean bearing says nothing about the tangent beside this short block.
+        street_corridor = geom.buffer(buffer_m)
         keep = []
         for j in candidates:
-            delta = bearing_delta(st_bearing[i], fac_bearing[j])
+            j = int(j)
+            delta = local_bearing_delta(
+                geom,
+                on_road.geometry.values[j],
+                street_corridor,
+                fac_buffers.values[j],
+            )
             if delta is None or delta <= tol_deg:
-                keep.append(int(j))
+                keep.append(j)
         if not keep:
             skipped_bearing += 1
             assigned.append("none")

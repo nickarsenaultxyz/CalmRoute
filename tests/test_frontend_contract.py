@@ -350,6 +350,50 @@ def test_fac_codes_match_the_frontend_table(features):
     assert {f["properties"].get("fac", 0) for f in features} <= set(range(8))
 
 
+def test_every_lfucg_street_rating_replays_from_its_exported_inputs(features):
+    """No block may have a different LTS from otherwise identical inputs.
+
+    This replays the classifier over every published LFUCG street, using the
+    exact facility, road class, inferred lanes, speed and traffic values shipped
+    to the browser. It catches stale ratings and hidden per-layer drift across
+    the entire map rather than relying on a few hand-selected corridors.
+    """
+    from lexbike import export, lts, params
+
+    rules = lts.Ruleset.from_params(params.load())
+    facility_by_code = {code: name for name, code in export.FAC_CODES.items()}
+    failures = []
+
+    for feature in features:
+        props = feature["properties"]
+        if props.get("kind") != 0 or props.get("src") == "osm":
+            continue
+        expected = lts.lts_for_segment(
+            facility_by_code[props["fac"]],
+            props["rc"],
+            props["ln"],
+            props.get("sp"),
+            props.get("ad"),
+            rules,
+        )
+        if props["lts"] != expected:
+            failures.append((feature["id"], props["lts"], expected))
+
+    assert not failures, f"published ratings disagree with their inputs: {failures[:10]}"
+
+
+def test_routing_graph_and_drawn_segments_use_the_same_lts(manifest, features):
+    """The route colour/penalty and the line visible underneath must agree."""
+    by_id = {feature["id"]: feature["properties"]["lts"] for feature in features}
+    graph = load(manifest["files"]["graph"])
+    failures = [
+        (edge_id, graph_lts, by_id.get(edge_id))
+        for _u, _v, edge_id, _miles, graph_lts in graph["edges"]
+        if by_id.get(edge_id) != graph_lts
+    ]
+    assert not failures, f"graph and map LTS disagree: {failures[:10]}"
+
+
 def test_coordinates_are_rounded_for_payload_size(features):
     for f in features[:500]:
         for x, y in f["geometry"]["coordinates"]:

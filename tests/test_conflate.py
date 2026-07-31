@@ -14,7 +14,14 @@ import pytest
 from shapely import STRtree
 from shapely.geometry import LineString, MultiLineString
 
-from lexbike.conflate import _find_attachments, bearing_delta, line_bearing
+from lexbike import params as params_mod
+from lexbike.conflate import (
+    _find_attachments,
+    bearing_delta,
+    conflate_on_road,
+    line_bearing,
+    local_bearing_delta,
+)
 
 
 def test_bearing_of_cardinal_directions():
@@ -104,6 +111,74 @@ def test_perpendicular_crossing_is_rejected_by_the_tolerance():
     arterial = line_bearing(LineString([(50, -50), (50, 50)]))  # north-south
     assert bearing_delta(trail, arterial) == pytest.approx(90.0)
     assert bearing_delta(trail, arterial) > 30.0  # the configured tolerance
+
+
+def test_local_bearing_uses_the_part_of_a_long_curve_beside_the_street():
+    """A long U-shaped facility must not be judged by its whole-record bearing.
+
+    This is the geometry behind the alternating ratings on Beaumont Centre
+    Circle: one continuous facility record bends around many short centreline
+    blocks. The old global comparison saw the horizontal block as perpendicular
+    to the mostly vertical facility and dropped it.
+    """
+    facility = LineString([(0, 0), (0, 100), (100, 100), (100, 0)])
+    street = LineString([(20, 104), (80, 104)])
+    buffer_m = 8
+
+    global_delta = bearing_delta(line_bearing(street), line_bearing(facility))
+    local_delta = local_bearing_delta(
+        street,
+        facility,
+        street.buffer(buffer_m),
+        facility.buffer(buffer_m),
+    )
+
+    assert global_delta > 30
+    assert local_delta == pytest.approx(0.0)
+
+
+def test_conflation_credits_the_nearby_part_of_a_long_curve():
+    """Exercise the full assignment path, not only the geometry helper."""
+    streets = gpd.GeoDataFrame(
+        {"id": [1], "rdclass": [5]},
+        geometry=[LineString([(20, 104), (80, 104)])],
+        crs=32616,
+    )
+    facilities = gpd.GeoDataFrame(
+        {
+            "id_src": [207],
+            "on_road": [True],
+            "fac": ["buffered"],
+        },
+        geometry=[LineString([(0, 0), (0, 100), (100, 100), (100, 0)])],
+        crs=32616,
+    )
+
+    out = conflate_on_road(
+        streets,
+        facilities,
+        params_mod.load(),
+        check_quality=False,
+    )
+
+    assert out.loc[0, "fac"] == "buffered"
+    assert out.loc[0, "fac_source_ids"] == [207]
+
+
+def test_local_bearing_still_rejects_a_perpendicular_crossing():
+    street = LineString([(-20, 0), (20, 0)])
+    facility = LineString([(0, -20), (0, 20)])
+    buffer_m = 8
+
+    delta = local_bearing_delta(
+        street,
+        facility,
+        street.buffer(buffer_m),
+        facility.buffer(buffer_m),
+    )
+
+    assert delta == pytest.approx(90.0)
+    assert delta > 30
 
 
 def test_nearby_distinct_junctions_are_not_thinned_by_along_path_distance():
