@@ -83,6 +83,30 @@ def test_router_waits_for_every_geometry_layer_before_drawing():
     assert "route feature geometry missing" in source
 
 
+def test_location_search_is_submit_only_bounded_and_rate_limited():
+    """The route geocoder must obey the public Nominatim usage policy.
+
+    Searches are explicit form submissions, never autocomplete requests. Every
+    query stays inside the published Lexington boundary, repeated queries are
+    cached, and network starts are kept more than one second apart.
+    """
+    view = Path("js/views/route.js").read_text()
+    geocoder = Path("js/lib/geocode.js").read_text()
+    main = Path("js/main.js").read_text()
+
+    assert "addEventListener('submit'" in view
+    assert "addEventListener('input'" in view
+    assert "handlers.onSearch" not in view.split(
+        "addEventListener('input'", 1
+    )[1].split("});", 1)[0]
+    assert "MIN_REQUEST_INTERVAL_MS = 1100" in geocoder
+    assert "cache.has(key)" in geocoder
+    assert "viewbox" in geocoder
+    assert "'bounded', '1'" in geocoder
+    assert "app.manifest.bbox" in main
+    assert "OpenStreetMap" in view and "Nominatim" in view
+
+
 # --------------------------------------------------------------------------
 #  stats — js/views/legend.js reads these exact paths
 # --------------------------------------------------------------------------
