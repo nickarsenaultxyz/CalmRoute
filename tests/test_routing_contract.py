@@ -132,7 +132,7 @@ def test_trails_can_be_joined_partway_along(graph):
     )
 
 
-def test_no_connector_is_longer_than_its_search_radius(graph):
+def test_no_connector_is_longer_than_its_reviewed_search_radius(graph):
     """A connector is a short link across a verge, not a shortcut.
 
     `project` is ambiguous where a path doubles back on itself, so deriving the
@@ -143,20 +143,98 @@ def test_no_connector_is_longer_than_its_search_radius(graph):
     import tomllib
 
     with open("params.toml", "rb") as fh:
-        max_m = float(tomllib.load(fh)["conflation"]["connector_max_m"])
+        conflation = tomllib.load(fh)["conflation"]
+    max_m = float(conflation["connector_max_m"])
+    reviewed_max_m = max(
+        float(row["max_m"]) for row in conflation["reviewed_connectors"])
 
-    fac = {}
+    props = {}
     for name in ("network.geojson", "context.geojson", "residential.geojson"):
         for f in json.loads((DATA / name).read_text())["features"]:
-            fac[f["id"]] = f["properties"].get("fac", 0)
+            props[f["id"]] = f["properties"]
 
-    connectors = [e for e in graph["edges"] if fac.get(e[2]) == 7]
+    connectors = [
+        e for e in graph["edges"]
+        if props.get(e[2], {}).get("fac") == 7
+    ]
     assert connectors, "no connectors in the graph"
 
-    longest_m = max(e[3] for e in connectors) * 1609.344
+    ordinary = [e for e in connectors if not props[e[2]].get("rv")]
+    reviewed = [e for e in connectors if props[e[2]].get("rv")]
+    longest_m = max(e[3] for e in ordinary) * 1609.344
     assert longest_m <= max_m * 1.1, (
-        f"longest connector is {longest_m:.0f} m against a {max_m:.0f} m radius"
+        f"longest automatic connector is {longest_m:.0f} m "
+        f"against a {max_m:.0f} m radius"
     )
+    assert len(reviewed) == len(conflation["reviewed_connectors"])
+    longest_reviewed_m = max(e[3] for e in reviewed) * 1609.344
+    assert longest_reviewed_m <= reviewed_max_m * 1.01, (
+        f"longest reviewed connector is {longest_reviewed_m:.0f} m "
+        f"against a {reviewed_max_m:.0f} m reviewed cap"
+    )
+
+
+def test_fine_arts_reviewed_connectors_join_paths_to_streets(graph):
+    """The two requested campus links must be genuine graph junctions."""
+    features = {}
+    for name in ("network.geojson", "context.geojson", "residential.geojson"):
+        for feature in json.loads((DATA / name).read_text())["features"]:
+            features[feature["id"]] = feature
+
+    reviewed = [
+        feature for feature in features.values()
+        if feature["properties"].get("fac") == 7
+        and feature["properties"].get("rv") == 1
+    ]
+    assert len(reviewed) == 2
+
+    adjacency = {}
+    for u, v, edge_id, *_ in graph["edges"]:
+        adjacency.setdefault(u, []).append(edge_id)
+        adjacency.setdefault(v, []).append(edge_id)
+
+    expected_sources = {
+        (-84.50717, 38.04241),
+        (-84.50949, 38.04007),
+    }
+    actual_sources = set()
+    target_names = set()
+    for connector in reviewed:
+        coords = [tuple(point) for point in connector["geometry"]["coordinates"]]
+        source = min(
+            coords,
+            key=lambda point: min(
+                (point[0] - expected[0]) ** 2
+                + (point[1] - expected[1]) ** 2
+                for expected in expected_sources
+            ),
+        )
+        actual_sources.add(source)
+
+        u = connector["properties"]["u"]
+        v = connector["properties"]["v"]
+        incident = {
+            node: [
+                features[edge_id]["properties"]
+                for edge_id in adjacency[node]
+                if edge_id != connector["id"]
+            ]
+            for node in (u, v)
+        }
+        assert any(
+            any(props.get("fac") == 6 for props in rows)
+            for rows in incident.values()
+        ), "reviewed connector does not touch an off-road path"
+        street_rows = [
+            props for rows in incident.values() for props in rows
+            if props.get("fac") != 7 and props.get("kind") == 0
+        ]
+        target_names.update(
+            props["nm"] for props in street_rows if props.get("nm")
+        )
+
+    assert actual_sources == expected_sources
+    assert {"S Mill St", "Colfax St"} <= target_names
 
 
 def test_the_low_stress_network_is_actually_routable(graph):

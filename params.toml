@@ -308,6 +308,23 @@ attach_merge_m = 0.75
 # router somewhere to turn off. OSM's longest imported way was 7.5 mi.
 max_path_edge_m = 800.0
 
+# Individually reviewed campus cut-throughs that are longer than the ordinary
+# 25 m verge/curb connector. These remain explicit so a global tolerance change
+# cannot manufacture similar shortcuts elsewhere. The source coordinate only
+# identifies an existing path endpoint; the street end is projected onto the
+# named LFUCG centreline and that centreline is split into a real graph node.
+[[conflation.reviewed_connectors]]
+name = "UK Fine Arts Trail to South Mill Street"
+source = [-84.50717, 38.04241]
+target_street = "S MILL ST"
+max_m = 90.0
+
+[[conflation.reviewed_connectors]]
+name = "Fine Arts south path to Colfax Street"
+source = [-84.50949, 38.04007]
+target_street = "COLFAX ST"
+max_m = 55.0
+
 
 # ---------------------------------------------------------------------------
 #  Connectivity
