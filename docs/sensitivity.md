@@ -1,6 +1,6 @@
 # Sensitivity of the LTS results to parameter choices
 
-Ruleset 2.0.0 (digest `d051417c1e56`).
+Ruleset 2.0.0 (digest `80b6e84e49da`).
 Regenerate with `make sensitivity`.
 
 Several thresholds in this model are judgement calls, not measurements.
@@ -9,13 +9,13 @@ choice and see immediately how much it would change.
 
 | variant | low-stress mi | islands | largest island | share | LTS<=3 mi | segments changed |
 |---|--:|--:|--:|--:|--:|--:|
-| `baseline` | 946.9 | 938 | 176.8 mi | 18.7% | 1248.7 | 0 |
-| `mixed_35mph_as_lts2` | 1134.1 | 509 | 668.7 mi | 59.0% | 1248.7 | 1646 |
-| `aadt_break_2000` | 942.5 | 959 | 173.9 mi | 18.5% | 1248.7 | 54 |
-| `aadt_break_5000` | 1028.9 | 618 | 263.5 mi | 25.6% | 1248.7 | 1014 |
-| `conflation_buffer_20m` | 949.3 | 939 | 176.9 mi | 18.6% | 1249.9 | 34 |
-| `connector_15m` | 946.9 | 950 | 175.6 mi | 18.6% | 1248.7 | 261 |
-| `connector_40m` | 946.9 | 912 | 186.5 mi | 19.7% | 1248.7 | 282 |
+| `baseline` | 947.6 | 934 | 177.6 mi | 18.7% | 1248.7 | 0 |
+| `mixed_35mph_as_lts2` | 1134.8 | 505 | 669.4 mi | 59.0% | 1248.7 | 1646 |
+| `aadt_break_2000` | 943.2 | 955 | 174.7 mi | 18.5% | 1248.7 | 54 |
+| `aadt_break_5000` | 1029.6 | 614 | 264.3 mi | 25.7% | 1248.7 | 1014 |
+| `conflation_buffer_20m` | 950.0 | 935 | 177.7 mi | 18.7% | 1249.9 | 34 |
+| `connector_15m` | 947.6 | 947 | 176.4 mi | 18.6% | 1248.7 | 261 |
+| `connector_40m` | 947.6 | 907 | 187.3 mi | 19.8% | 1248.7 | 282 |
 
 ## What each variant tests
 

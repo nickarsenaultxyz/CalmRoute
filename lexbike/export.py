@@ -379,7 +379,7 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
             "access_roads": {
                 "segments": int(osm_access.sum()),
                 "miles": round(float(miles[osm_access].sum()), 1),
-                "rating": int(params.get("osm.access_lts", 3)),
+                "rating": int(params.get("osm.access_lts", 2)),
             },
         },
         "coverage": {

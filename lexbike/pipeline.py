@@ -504,8 +504,8 @@ def assemble_edges(streets, paths, connectors, params: Params):
         access = role == "access"
         p["kind"] = np.where(access, "street", "facility")
         # Paths and access links have no LFUCG traffic record. An explicitly
-        # bicycle-authorized service road is kept conservative (LTS 3 by
-        # default) and is not presented or counted as a bike facility.
+        # bicycle-authorized service road receives its reviewed configured
+        # rating and is not presented or counted as a bike facility.
         p["rdclass"] = 6
         p["lanes"] = 1
         p["speed_mph"] = pd.NA

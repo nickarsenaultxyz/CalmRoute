@@ -361,9 +361,10 @@ dedupe_max_overlap = 0.5
 access_dedupe_buffer_m = 8.0
 access_search_radius_m = 750
 
-# Service roads are motor-vehicle spaces with no trustworthy traffic count.
-# Keep them routable but do not advertise them as low-stress bike facilities.
-access_lts = 3
+# The reviewed Baptist Health internal-access corridor has explicit bicycle
+# permission. Rate it LTS 2, but do not advertise or count it as a dedicated
+# bike facility.
+access_lts = 2
 
 # Refuse an import wildly outside what was measured, so a bad Overpass day or an
 # edit war cannot silently swing the "bike network" between builds.

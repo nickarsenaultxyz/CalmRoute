@@ -146,9 +146,10 @@ for unambiguous off-road cycling paths and service roads carrying explicit
 bicycle permission. Parking aisles, private access and one-way service roads are
 excluded. Geometry already represented by LFUCG is removed by an overlap check;
 every remaining OSM segment is marked in the download and attributed on the
-map. Access roads are conservatively rated LTS 3 and do not count as bike
-facilities. A failed, empty, or unexpectedly large OSM response also stops
-deployment instead of silently reverting the public map to LFUCG-only data.
+map. The reviewed Baptist Health access corridor is rated LTS 2 and does not
+count as a bike facility. A failed, empty, or unexpectedly large OSM response
+also stops deployment instead of silently reverting the public map to
+LFUCG-only data.
 
 A note on the bike layer, because it is easy to misread: `Type_Facility` is the
 facility that physically exists. `AltType_Facility` is a *recommended upgrade*,

@@ -8,8 +8,8 @@ apartment-complex connectors and park links that the city file does not contain.
 **Why this is importable when the general OSM street network is not.** A path
 separated from traffic is LTS 1 *by definition*, which is already how LFUCG
 paths are rated. The one reviewed service-road corridor is different: it is
-included only because OSM explicitly permits bicycles, given a conservative
-LTS 3 rating, and not counted as a bike facility. These geometries use the same
+included only because OSM explicitly permits bicycles, given an LTS 2 rating,
+and not counted as a bike facility. These geometries use the same
 attachment logic as LFUCG paths rather than creating a parallel street network.
 
 **What is deliberately excluded.** OSM also has 261 miles of paved

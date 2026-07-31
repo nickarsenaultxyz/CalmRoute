@@ -42,8 +42,8 @@ export function render(methodology, stats) {
       roads from
       <a href="https://www.openstreetmap.org/copyright"
          target="_blank" rel="noopener">OpenStreetMap contributors</a>
-      under the ODbL. Access roads are conservatively rated LTS
-      ${stats.osm_paths.access_roads?.rating ?? 3} and are not counted as bike
+      under the ODbL. The reviewed access corridor is rated LTS
+      ${stats.osm_paths.access_roads?.rating ?? 2} and are not counted as bike
       facilities.`
     : '';
 
