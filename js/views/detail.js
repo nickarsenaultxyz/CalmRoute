@@ -11,7 +11,14 @@
  * technical value and a methodology link are both still present.
  */
 
-import { BASIS_MEASURED, CONFIDENCE, FAC_PUBLIC, KIND_PUBLIC, LTS } from '../config.js';
+import {
+  BASIS_MEASURED,
+  CONFIDENCE,
+  FAC_PUBLIC,
+  KIND_PUBLIC,
+  LTS,
+  ROAD_CLASS_PUBLIC,
+} from '../config.js';
 import { escapeHtml, miles, speed, traffic } from '../lib/format.js';
 
 const BASIS_NOTE = {
@@ -60,6 +67,16 @@ export function render(props, { stats, aadtYear, council } = {}) {
         year: aadtYear,
         measured: props.basis === BASIS_MEASURED,
       }), 'Not available')}
+      ${props.kind === 0
+        ? fact('Road type', ROAD_CLASS_PUBLIC[props.rc], 'Not on record')
+        : ''}
+      ${props.kind === 0
+        ? fact(
+          'Through lanes',
+          props.ln == null ? null : `${props.ln} (estimated)`,
+          'Not available',
+        )
+        : ''}
       ${fact('Length', miles(props.mi), '—')}
       ${props.src === 'osm'
         ? fact(

@@ -115,6 +115,20 @@ export const FAC_PUBLIC = {
   7: 'Path connection',
 };
 
+/** LFUCG functional road class, mirroring [rdclass.labels] in params.toml.
+ *  Shown in segment details because both this class and the inferred lane count
+ *  can explain why otherwise similar-looking blocks receive different ratings. */
+export const ROAD_CLASS_PUBLIC = {
+  1: 'Interstate / highway',
+  2: 'Parkway / expressway',
+  3: 'Arterial',
+  4: 'Major collector',
+  5: 'Minor collector',
+  6: 'Local street',
+  7: 'Service road',
+  8: 'Alley',
+};
+
 /**
  * How hard the router works to avoid stress, as a rider-facing scale.
  *
