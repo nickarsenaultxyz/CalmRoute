@@ -1,6 +1,7 @@
-# Lexington Bike Stress
+# CalmRoute
 
-How comfortable is each street in Lexington, Kentucky to ride a bike on?
+Wanting to ride your bike to get groceries? Perhaps to go on a date with a cute person? Not wanting to deal with stress caused by automotive infrastructure?
+CalmRoute helps you find routes through Lexington that are relaxing and make riding a bicycle enjoyable!
 
 This computes a **Level of Traffic Stress (LTS)** rating for all 1,776 miles of
 Lexington's street network — not just the streets that already have bike
