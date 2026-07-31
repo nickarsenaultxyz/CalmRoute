@@ -13,7 +13,9 @@
  * hard to try is a slider rather than a checkbox, because it is a preference.
  */
 
-import { LTS, QUIETEST_ROUTE_LEVEL, ROUTE_LEVELS } from '../config.js';
+import {
+  LTS, QUIETEST_ROUTE_LEVEL, ROUTE_LEVELS,
+} from '../config.js?v=20260731-field-notebook';
 import { escapeHtml, miles as fmtMiles, minutes } from '../lib/format.js';
 
 const POINT_LABEL = { from: 'Start', to: 'Destination' };

@@ -8,7 +8,9 @@
  * message-passing would cost more than the search.
  */
 
-import { ROUTE_LEVELS, DEFAULT_ROUTE_LEVEL } from '../config.js';
+import {
+  ROUTE_LEVELS, DEFAULT_ROUTE_LEVEL,
+} from '../config.js?v=20260731-field-notebook';
 
 /**
  * One weight function per comfort setting, keyed by `ROUTE_LEVELS[i].key`, plus

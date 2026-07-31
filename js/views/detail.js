@@ -18,7 +18,7 @@ import {
   KIND_PUBLIC,
   LTS,
   ROAD_CLASS_PUBLIC,
-} from '../config.js';
+} from '../config.js?v=20260731-field-notebook';
 import { escapeHtml, miles, speed, traffic } from '../lib/format.js';
 
 const BASIS_NOTE = {
