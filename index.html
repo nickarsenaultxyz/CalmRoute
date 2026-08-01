@@ -27,7 +27,7 @@
 <meta name="twitter:card" content="summary_large_image">
 
 <link rel="stylesheet" href="./assets/vendor/maplibre-gl-5.24.0.css">
-<link rel="stylesheet" href="./assets/app.css?v=20260731-calmroute-roomy">
+<link rel="stylesheet" href="./assets/app.css?v=20260801-street-inspector">
 </head>
 <body>
 
@@ -55,6 +55,20 @@
     <h1 id="panel-title">Calmroute</h1>
   </header>
   <div id="panel-body" class="panel-body" tabindex="-1"></div>
+</aside>
+
+<aside id="street-inspector" class="street-inspector" role="dialog"
+       aria-modal="false" aria-labelledby="street-inspector-title"
+       tabindex="-1" hidden>
+  <header class="street-inspector-head">
+    <div>
+      <span class="eyebrow">Street inspector</span>
+      <h2 id="street-inspector-title"></h2>
+    </div>
+    <button id="street-inspector-close" class="street-inspector-close"
+            type="button" aria-label="Close street inspector">×</button>
+  </header>
+  <div id="street-inspector-content"></div>
 </aside>
 
 <div id="hover-card" class="hover-card" hidden aria-hidden="true"></div>
@@ -119,6 +133,6 @@
 })();
 </script>
 
-<script type="module" src="./js/main.js?v=20260801-route-facility-width"></script>
+<script type="module" src="./js/main.js?v=20260801-street-inspector"></script>
 </body>
 </html>

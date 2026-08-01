@@ -98,7 +98,7 @@ def test_router_uses_one_cache_key_for_its_graph_runtime():
 
     assert "import('./lib/graph.js')" not in main
     assert "from './lib/graph.js?v=20260731-routing-runtime'" in main
-    assert 'src="./js/main.js?v=20260801-route-facility-width"' in index
+    assert 'src="./js/main.js?v=20260801-street-inspector"' in index
 
 
 def test_location_search_is_submit_only_bounded_and_rate_limited():
@@ -208,6 +208,27 @@ def test_selected_route_distinguishes_bike_infrastructure_by_width():
     assert "properties: { lts, bike_infra:" in main
     assert "fac !== FAC_CONNECTOR" in main
     assert "props.osm_role !== 'campus_path'" in main
+
+
+def test_street_inspector_is_a_bottom_left_map_overlay():
+    """Inspecting a street must not replace the persistent route sidebar."""
+    index = Path("index.html").read_text()
+    main = Path("js/main.js").read_text()
+    styles = Path("assets/app.css").read_text()
+    detail_flow = main.split(
+        "function showDetail", 1
+    )[1].split(
+        "function closeInspector", 1
+    )[0]
+
+    assert index.index('id="panel"') < index.index('id="street-inspector"')
+    assert 'aria-labelledby="street-inspector-title"' in index
+    assert "app.panel.show" not in detail_flow
+    assert "els.inspector.hidden = false" in detail_flow
+    assert "els.inspectorContent.innerHTML = detail.render" in detail_flow
+    assert "left: calc(var(--panel-w) + 24px); bottom: 24px;" in styles
+    assert "width: min(400px" in styles
+    assert "closeInspector();" in main
 
 
 # --------------------------------------------------------------------------

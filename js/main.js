@@ -32,6 +32,10 @@ const els = {
   loading: document.getElementById('loading'),
   loadingText: document.getElementById('loading-text'),
   hover: document.getElementById('hover-card'),
+  inspector: document.getElementById('street-inspector'),
+  inspectorTitle: document.getElementById('street-inspector-title'),
+  inspectorContent: document.getElementById('street-inspector-content'),
+  inspectorClose: document.getElementById('street-inspector-close'),
 };
 
 /** Exposed for debugging and automated checks. Read-only in spirit — nothing in
@@ -88,8 +92,7 @@ function fail(message, err) {
 
 function showLegend({ push = false } = {}) {
   app.state.view = 'legend';
-  app.state.selected = null;
-  clearSelection();
+  closeInspector({ updateUrl: false });
   const body = app.panel.show({
     title: 'Lexington Bike Routes',
     root: true,
@@ -289,23 +292,38 @@ function showSettings({ push = true } = {}) {
 
 function showDetail(feature, { push = true } = {}) {
   const props = feature.properties || {};
-  app.state.view = 'segment';
+  // Old shared links used `view=segment`, when inspection replaced the whole
+  // sidebar. Preserve those links while moving the detail into its own map
+  // card beside the persistent navigation.
+  if (app.state.view === 'segment') showRoute({ push: false });
   app.state.selected = feature.id;
   select(feature);
 
-  const body = app.panel.show({
-    title: props.nm || 'Unnamed street',
-    view: 'segment',
-    html: detail.render(props, {
-      stats: app.stats, aadtYear: app.aadtYear, council: app.council,
-    }),
+  els.inspectorTitle.textContent = props.nm || 'Unnamed street';
+  els.inspectorContent.innerHTML = detail.render(props, {
+    stats: app.stats, aadtYear: app.aadtYear, council: app.council,
   });
-  body.querySelectorAll('[data-nav]').forEach((btn) => {
-    btn.addEventListener('click', () => openView(btn.dataset.nav, { push: true }));
+  els.inspectorContent.querySelectorAll('[data-nav]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      els.inspector.hidden = true;
+      openView(btn.dataset.nav, { push: true });
+    });
   });
+  els.inspector.hidden = false;
   write(app.state, { push });
   announce(`Selected ${props.nm || 'unnamed street'}, rated ${
     (app.stats && props.lts != null) ? detailRatingWord(props.lts) : 'unknown'}.`);
+}
+
+function closeInspector({ updateUrl = true } = {}) {
+  if (els.inspector.hidden && app.state.selected == null) return;
+  els.inspector.hidden = true;
+  els.inspectorContent.innerHTML = '';
+  els.inspectorTitle.textContent = '';
+  app.state.selected = null;
+  clearSelection();
+  if (updateUrl) write(app.state);
+  announce('Street inspector closed.');
 }
 
 const detailRatingWord = (lts) =>
@@ -848,13 +866,13 @@ function installInteraction(map) {
     ];
     const hits = map.queryRenderedFeatures(box, { layers });
     if (!hits.length) {
-      if (app.state.view !== 'route') showLegend({ push: true });
+      closeInspector();
       return;
     }
     // Prefer the best facility when several overlap under one finger.
     hits.sort((a, b) => (a.properties.lts ?? 9) - (b.properties.lts ?? 9));
     showDetail(hits[0]);
-    if (app.panel.isSheet) app.panel.focusBody();
+    if (app.panel.isSheet) els.inspector.focus({ preventScroll: true });
   });
 }
 
@@ -875,6 +893,7 @@ async function boot() {
   if (!checkSupport()) return;
 
   app.panel = new Panel({ onBack: () => history.back() });
+  els.inspectorClose.addEventListener('click', () => closeInspector());
 
   // The skip link promises "browse streets as a list", so honour that rather
   // than just moving focus into whatever the panel happens to be showing.
@@ -887,7 +906,10 @@ async function boot() {
   // detail to comparison, or returns there from a secondary map tool.
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
-    if (app.state.view === 'route' && app.route.screen === 'detail') {
+    if (!els.inspector.hidden) {
+      closeInspector();
+      app.map?.getCanvas().focus({ preventScroll: true });
+    } else if (app.state.view === 'route' && app.route.screen === 'detail') {
       app.route.screen = 'results';
       showRoute({ push: false });
       app.panel.focusBody();
@@ -997,8 +1019,10 @@ async function boot() {
 
   onPopState((next) => {
     app.state = { ...app.state, ...next };
-    if (next.view === 'segment' && next.selected != null) restoreSelection(false);
-    else openView(next.view, { push: false });
+    if (next.view === 'segment') app.state.view = 'route';
+    openView(app.state.view, { push: false });
+    if (next.selected != null) restoreSelection(false);
+    else closeInspector({ updateUrl: false });
   });
 }
 
