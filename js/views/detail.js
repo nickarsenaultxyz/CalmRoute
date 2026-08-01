@@ -21,18 +21,6 @@ import {
 } from '../config.js?v=20260731-field-notebook';
 import { escapeHtml, miles, speed, traffic } from '../lib/format.js';
 
-const BASIS_NOTE = {
-  0: 'Rated from the type of path alone — traffic on nearby roads does not affect it.',
-  1: 'Rated from the street type and posted speed. No traffic count is available '
-     + 'for this street, so the volume is estimated from similar streets.',
-  2: 'Rated from the street type, posted speed and a measured traffic count.',
-};
-
-const MODEL_BASIS_NOTE =
-  'Rated from the street type and posted speed. No traffic count is available '
-  + 'for this street, so the volume is a conservative estimate from a model '
-  + 'validated on held-out routes.';
-
 function fact(label, value, unknownText) {
   if (value == null || value === '') {
     return `<dt>${label}</dt><dd class="unknown">${unknownText}</dd>`;
@@ -42,11 +30,7 @@ function fact(label, value, unknownText) {
 
 export function render(props, { stats, aadtYear, council } = {}) {
   const lts = LTS[props.lts] || LTS[4];
-  const name = props.nm || 'Unnamed street';
   const conf = CONFIDENCE[props.cf ?? 1];
-  const basis = props.am === 1
-    ? MODEL_BASIS_NOTE
-    : BASIS_NOTE[props.basis ?? 1];
 
   const facility = FAC_PUBLIC[props.fac ?? 0];
   const kind = KIND_PUBLIC[props.kind ?? 0];
@@ -101,8 +85,6 @@ export function render(props, { stats, aadtYear, council } = {}) {
         ${councilRow(props, council)}
       </dl>
     </div>
-
-    <p class="note">${escapeHtml(basis)}</p>
 
     <p class="tech">
       LTS ${props.lts} · ${escapeHtml(conf.label)} confidence ·

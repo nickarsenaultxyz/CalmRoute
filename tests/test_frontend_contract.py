@@ -98,7 +98,7 @@ def test_router_uses_one_cache_key_for_its_graph_runtime():
 
     assert "import('./lib/graph.js')" not in main
     assert "from './lib/graph.js?v=20260731-routing-runtime'" in main
-    assert 'src="./js/main.js?v=20260801-inspector-details-only"' in index
+    assert 'src="./js/main.js?v=20260801-compact-inspector"' in index
 
 
 def test_location_search_is_submit_only_bounded_and_rate_limited():
@@ -239,6 +239,8 @@ def test_street_inspector_contains_details_without_route_or_share_actions():
     assert 'data-nav="share"' not in detail
     assert "Plan a route" not in detail
     assert "contact your council member" not in detail
+    assert "Rated from the street type" not in detail
+    assert 'class="note"' not in detail
 
 
 # --------------------------------------------------------------------------
