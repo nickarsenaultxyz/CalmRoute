@@ -98,7 +98,7 @@ def test_router_uses_one_cache_key_for_its_graph_runtime():
 
     assert "import('./lib/graph.js')" not in main
     assert "from './lib/graph.js?v=20260731-routing-runtime'" in main
-    assert 'src="./js/main.js?v=20260801-street-inspector"' in index
+    assert 'src="./js/main.js?v=20260801-inspector-details-only"' in index
 
 
 def test_location_search_is_submit_only_bounded_and_rate_limited():
@@ -229,6 +229,16 @@ def test_street_inspector_is_a_bottom_left_map_overlay():
     assert "left: calc(var(--panel-w) + 24px); bottom: 24px;" in styles
     assert "width: min(400px" in styles
     assert "closeInspector();" in main
+
+
+def test_street_inspector_contains_details_without_route_or_share_actions():
+    """Street inspection must not duplicate the route and sharing controls."""
+    detail = Path("js/views/detail.js").read_text()
+
+    assert 'data-nav="route"' not in detail
+    assert 'data-nav="share"' not in detail
+    assert "Plan a route" not in detail
+    assert "contact your council member" not in detail
 
 
 # --------------------------------------------------------------------------

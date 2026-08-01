@@ -104,11 +104,6 @@ export function render(props, { stats, aadtYear, council } = {}) {
 
     <p class="note">${escapeHtml(basis)}</p>
 
-    <nav class="panel-nav" aria-label="Actions for this street">
-      <button class="btn primary" data-nav="route">Plan a route</button>
-      <button class="btn" data-nav="share">Share, or contact your council member</button>
-    </nav>
-
     <p class="tech">
       LTS ${props.lts} · ${escapeHtml(conf.label)} confidence ·
       <button class="linklike" data-nav="methodology">what do these ratings mean?</button>

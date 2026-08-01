@@ -21,7 +21,7 @@ import {
 import { checkSupport, createMap, setBasemap } from './map.js?v=20260731-field-notebook';
 import { Panel } from './panel.js?v=20260731-calmroute-layout';
 import * as browse from './views/browse.js?v=20260731-field-notebook';
-import * as detail from './views/detail.js?v=20260731-uk-campus';
+import * as detail from './views/detail.js?v=20260801-inspector-details-only';
 import * as legend from './views/legend.js?v=20260731-solid-lines';
 import * as methodology from './views/methodology.js?v=20260731-uk-campus';
 import * as routeView from './views/route.js?v=20260731-solid-lines';
