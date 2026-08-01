@@ -1,7 +1,7 @@
 /** Application entry point. */
 
 import {
-  LTS, LTS_ORDER_LEGEND,
+  FAC_CONNECTOR, LTS, LTS_ORDER_LEGEND,
 } from './config.js?v=20260731-solid-lines';
 import {
   deferResidential, loadContext, loadCouncil, loadGraph, loadManifest,
@@ -10,7 +10,7 @@ import {
 import {
   addConnectorLayer, addLayers, addRouteLayers, addSources, hitLayers, setLtsVisible,
   setRoute, setRouteAccess, setRouteEndpoints, setSourceVisible,
-} from './layers.js?v=20260731-uk-campus-thin';
+} from './layers.js?v=20260801-route-facility-width';
 import {
   buildGraph, clipToEnd, snapToNetwork,
 } from './lib/graph.js?v=20260731-routing-runtime';
@@ -624,11 +624,17 @@ function drawRoute(result) {
     return true;
   }
   const features = [];
-  const push = (coords, lts) => {
+  const push = (coords, lts, props = {}) => {
     if (coords && coords.length > 1) {
+      const fac = props.fac ?? 0;
+      const bikeInfrastructure = (
+        fac > 0
+        && fac !== FAC_CONNECTOR
+        && props.osm_role !== 'campus_path'
+      );
       features.push({
         type: 'Feature',
-        properties: { lts },
+        properties: { lts, bike_infra: bikeInfrastructure ? 1 : 0 },
         geometry: { type: 'LineString', coordinates: coords },
       });
     }
@@ -644,16 +650,18 @@ function drawRoute(result) {
     const last = first === snapA ? snapB : snapA;
     push([[first.x, first.y], ...first.coords.slice(
       first.vertexIndex + 1, last.vertexIndex + 1), [last.x, last.y]],
-      app.graph.eLts[snapA.edge]);
+      app.graph.eLts[snapA.edge],
+      app.featuresById.get(app.graph.eId[snapA.edge])?.properties);
   } else {
     if (snapA) {
       push(clipToEnd(snapA, partial.startNode === snapA.v),
-           app.graph.eLts[snapA.edge]);
+           app.graph.eLts[snapA.edge],
+           app.featuresById.get(app.graph.eId[snapA.edge])?.properties);
     }
     const missingIds = [];
     for (const id of result.featureIds) {
       const f = app.featuresById.get(id);
-      if (f) push(f.geometry.coordinates, f.properties.lts);
+      if (f) push(f.geometry.coordinates, f.properties.lts, f.properties);
       else missingIds.push(id);
     }
     if (missingIds.length) {
@@ -664,7 +672,8 @@ function drawRoute(result) {
     }
     if (snapB) {
       push(clipToEnd(snapB, partial.endNode === snapB.v),
-           app.graph.eLts[snapB.edge]);
+           app.graph.eLts[snapB.edge],
+           app.featuresById.get(app.graph.eId[snapB.edge])?.properties);
     }
   }
 

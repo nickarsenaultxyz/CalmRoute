@@ -15,6 +15,14 @@ const ROUTE_CONTEXT_OPACITY = 0.18;
 // and shared-use paths retain the stronger visual hierarchy.
 const CAMPUS_WALKWAY_WIDTH_SCALE = 0.45;
 
+// A selected route keeps its stress colours, while a small width change shows
+// whether each leg has dedicated/shared bicycle infrastructure. The
+// difference is deliberately modest: ordinary streets remain easy to follow.
+const ROUTE_FACILITY_WIDTH = 6;
+const ROUTE_STREET_WIDTH = 5;
+const ROUTE_FACILITY_CASING_WIDTH = 12;
+const ROUTE_STREET_CASING_WIDTH = 10.5;
+
 const casingOpacity = (focused = false) => [
   'interpolate', ['linear'], ['zoom'],
   11, 0,
@@ -197,7 +205,14 @@ export function addRouteLayers(map) {
   map.addLayer({
     id: 'route-casing', type: 'line', source: 'route',
     layout: { 'line-cap': 'round', 'line-join': 'round' },
-    paint: { 'line-color': '#fbf8f0', 'line-width': 12, 'line-opacity': 0.95 },
+    paint: {
+      'line-color': '#fbf8f0',
+      'line-width': ['case',
+        ['==', ['get', 'bike_infra'], 1],
+        ROUTE_FACILITY_CASING_WIDTH,
+        ROUTE_STREET_CASING_WIDTH],
+      'line-opacity': 0.95,
+    },
   });
   map.addLayer({
     id: 'route-line', type: 'line', source: 'route',
@@ -210,7 +225,10 @@ export function addRouteLayers(map) {
         3, LTS[3].color,
         4, LTS[4].color,
         LTS[0].color],
-      'line-width': 6,
+      'line-width': ['case',
+        ['==', ['get', 'bike_infra'], 1],
+        ROUTE_FACILITY_WIDTH,
+        ROUTE_STREET_WIDTH],
     },
   });
   map.addSource('route-access', { type: 'geojson', data: empty });

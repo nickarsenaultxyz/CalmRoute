@@ -98,7 +98,7 @@ def test_router_uses_one_cache_key_for_its_graph_runtime():
 
     assert "import('./lib/graph.js')" not in main
     assert "from './lib/graph.js?v=20260731-routing-runtime'" in main
-    assert 'src="./js/main.js?v=20260731-routing-runtime"' in index
+    assert 'src="./js/main.js?v=20260801-route-facility-width"' in index
 
 
 def test_location_search_is_submit_only_bounded_and_rate_limited():
@@ -188,6 +188,26 @@ def test_uk_campus_walkways_render_thinner_than_bike_infrastructure():
     )[0]
     assert "'campus_path'" in width
     assert "facilityScale" in width
+
+
+def test_selected_route_distinguishes_bike_infrastructure_by_width():
+    """Route colour remains stress; a modest width change shows facilities."""
+    layers = Path("js/layers.js").read_text()
+    main = Path("js/main.js").read_text()
+    route_layers = layers.split(
+        "export function addRouteLayers", 1
+    )[1].split(
+        "export function setRoute", 1
+    )[0]
+
+    assert "ROUTE_FACILITY_WIDTH = 6" in layers
+    assert "ROUTE_STREET_WIDTH = 5" in layers
+    assert "ROUTE_FACILITY_CASING_WIDTH = 12" in layers
+    assert "ROUTE_STREET_CASING_WIDTH = 10.5" in layers
+    assert route_layers.count("['get', 'bike_infra']") == 2
+    assert "properties: { lts, bike_infra:" in main
+    assert "fac !== FAC_CONNECTOR" in main
+    assert "props.osm_role !== 'campus_path'" in main
 
 
 # --------------------------------------------------------------------------
