@@ -24,7 +24,7 @@ import * as browse from './views/browse.js?v=20260731-field-notebook';
 import * as detail from './views/detail.js?v=20260801-compact-inspector';
 import * as legend from './views/legend.js?v=20260731-solid-lines';
 import * as methodology from './views/methodology.js?v=20260731-uk-campus';
-import * as routeView from './views/route.js?v=20260802-calm-control';
+import * as routeView from './views/route.js?v=20260802-map-pickers';
 import * as settings from './views/settings.js?v=20260731-field-notebook';
 import * as share from './views/share.js?v=20260731-routing-focus';
 

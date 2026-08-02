@@ -98,7 +98,7 @@ def test_router_uses_one_cache_key_for_its_graph_runtime():
 
     assert "import('./lib/graph.js')" not in main
     assert "from './lib/graph.js?v=20260731-routing-runtime'" in main
-    assert 'src="./js/main.js?v=20260802-calm-control"' in index
+    assert 'src="./js/main.js?v=20260802-map-pickers"' in index
 
 
 def test_location_search_is_submit_only_bounded_and_rate_limited():
@@ -271,6 +271,22 @@ def test_calmness_slider_is_continuous_while_routes_remain_three_presets():
     assert "handlers.onSlider?.(value, key)" in route
     assert "selectRouteCandidate(key, value)" in main
     assert "sliderValue == null" in main
+
+
+def test_map_location_pickers_are_clear_grouped_controls():
+    """A/B map picking belongs in an explicit control group below the fields."""
+    route = Path("js/views/route.js").read_text()
+    styles = Path("assets/app.css").read_text()
+
+    assert 'class="route-map-pickers"' in route
+    assert "Choose route locations on the map" in route
+    assert "Choose ${point.label.toLowerCase()} on map" in route
+    assert "Tap map to set ${point.label.toLowerCase()}" in route
+    assert 'aria-pressed="${active}"' in route
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in styles
+    assert '.route-map-pick[aria-pressed="true"]' in styles
+    assert "Pick A on map" not in route
+    assert "Pick B on map" not in route
 
 
 # --------------------------------------------------------------------------

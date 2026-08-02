@@ -42,20 +42,14 @@ function searchBox(state) {
     <section class="box route-search-box" aria-label="Route locations">
       ${locationRow(state, 'from')}
       ${locationRow(state, 'to')}
-      <div class="route-search-actions">
-        <button class="btn ghost" type="button" data-point="from"
-                aria-pressed="${state.picking === 'from'}">
-          ${state.picking === 'from' ? 'Tap map for A…' : 'Pick A on map'}
-        </button>
-        <button class="btn ghost" type="button" data-point="to"
-                aria-pressed="${state.picking === 'to'}">
-          ${state.picking === 'to' ? 'Tap map for B…' : 'Pick B on map'}
-        </button>
-        <span class="grow"></span>
-        ${state.from || state.to
-          ? '<button class="btn ghost" type="button" data-route-action="clear">Clear</button>'
-          : ''}
+      <div class="route-map-pickers" aria-label="Choose route locations on the map">
+        ${mapPicker(state, 'from')}
+        ${mapPicker(state, 'to')}
       </div>
+      ${state.from || state.to
+        ? '<button class="btn ghost route-clear" type="button" '
+          + 'data-route-action="clear">Clear both locations</button>'
+        : ''}
       ${state.screen === 'explore' ? `
         <button class="btn primary route-find" type="button"
                 data-route-action="find"
@@ -68,6 +62,22 @@ function searchBox(state) {
       <a href="https://nominatim.openstreetmap.org/" target="_blank"
          rel="noopener">OpenStreetMap Nominatim</a>.
     </p>`;
+}
+
+function mapPicker(state, which) {
+  const active = state.picking === which;
+  const point = POINT[which];
+  const action = active
+    ? `Tap map to set ${point.label.toLowerCase()}`
+    : state[which]
+      ? `Move ${point.label.toLowerCase()} on map`
+      : `Choose ${point.label.toLowerCase()} on map`;
+  return `
+    <button class="route-map-pick ${which}" type="button" data-point="${which}"
+            aria-pressed="${active}">
+      <span class="route-map-pick-pin" aria-hidden="true">${point.letter}</span>
+      <span>${action}</span>
+    </button>`;
 }
 
 function locationRow(state, which) {
