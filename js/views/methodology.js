@@ -12,8 +12,8 @@
 
 import {
   LTS, LTS_ORDER_LEGEND,
-} from '../config.js?v=20260731-solid-lines';
-import { swatchSvg } from '../layers.js?v=20260731-uk-campus-thin';
+} from '../config.js?v=20260802-signal-orange';
+import { swatchSvg } from '../layers.js?v=20260802-signal-orange';
 import { escapeHtml } from '../lib/format.js';
 
 export function render(methodology, stats) {

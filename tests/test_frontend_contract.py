@@ -98,7 +98,7 @@ def test_router_uses_one_cache_key_for_its_graph_runtime():
 
     assert "import('./lib/graph.js')" not in main
     assert "from './lib/graph.js?v=20260731-routing-runtime'" in main
-    assert 'src="./js/main.js?v=20260802-search-card"' in index
+    assert 'src="./js/main.js?v=20260802-signal-orange"' in index
 
 
 def test_location_search_is_submit_only_bounded_and_rate_limited():
@@ -284,7 +284,7 @@ def test_map_location_pickers_are_clear_grouped_controls():
     assert "Choose ${point.label.toLowerCase()} on map" in route
     assert "Tap map to set ${point.label.toLowerCase()}" in route
     assert 'aria-pressed="${active}"' in route
-    assert "grid-template-columns: minmax(0, 1fr) 48px" in styles
+    assert "grid-template-columns: minmax(0, 1fr) 44px" in styles
     assert '.route-map-pick[aria-pressed="true"]' in styles
     assert ".route-swap-row" in styles
     assert "picking: null" in main

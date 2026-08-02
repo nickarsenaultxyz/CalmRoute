@@ -18,7 +18,7 @@ import {
   KIND_PUBLIC,
   LTS,
   ROAD_CLASS_PUBLIC,
-} from '../config.js?v=20260731-field-notebook';
+} from '../config.js?v=20260802-signal-orange';
 import { escapeHtml, miles, speed, traffic } from '../lib/format.js';
 
 function fact(label, value, unknownText) {

@@ -10,7 +10,7 @@
 
 import {
   ROUTE_LEVELS, DEFAULT_ROUTE_LEVEL,
-} from '../config.js?v=20260731-uk-campus';
+} from '../config.js?v=20260802-signal-orange';
 
 /**
  * One weight function per comfort setting, keyed by `ROUTE_LEVELS[i].key`, plus

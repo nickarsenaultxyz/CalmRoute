@@ -2,7 +2,7 @@
 
 import {
   BASEMAPS, DEFAULT_BASEMAP,
-} from './config.js?v=20260731-field-notebook';
+} from './config.js?v=20260802-signal-orange';
 
 const RATIO = window.devicePixelRatio > 1.5 ? '@2x' : '';
 
@@ -18,18 +18,14 @@ function rasterSource(key) {
   };
 }
 
-/**
- * Field-notebook treatment for the basemap tiles: desaturate and let the warm
- * paper background wash through, so the LTS colours are the only saturated
- * thing on screen. Skipped for satellite, where true colour is the point, and
- * irrelevant to `none` (no raster layer at all).
- */
+/** Keep the Transit control UI paired with a neutral light map. Desaturation
+ * lets the status colours carry the hierarchy without inverting the tiles. */
 function rasterPaint(key) {
   if (key === 'satellite') return {};
   return {
-    'raster-saturation': -0.5,
-    'raster-contrast': -0.05,
-    'raster-opacity': 0.88,   // paper (#f4f0e6) shows through as a sepia wash
+    'raster-saturation': -0.82,
+    'raster-contrast': -0.08,
+    'raster-opacity': 0.94,
   };
 }
 
@@ -39,7 +35,7 @@ function baseStyle(key) {
     version: 8,
     sources: src ? { basemap: src } : {},
     layers: [
-      { id: 'bg', type: 'background', paint: { 'background-color': '#f4f0e6' } },
+      { id: 'bg', type: 'background', paint: { 'background-color': '#f2f5f7' } },
       ...(src ? [{ id: 'basemap', type: 'raster', source: 'basemap', paint: rasterPaint(key) }] : []),
     ],
   };

@@ -8,7 +8,7 @@
  * as from the background.
  */
 
-import { BASEMAPS } from '../config.js?v=20260731-field-notebook';
+import { BASEMAPS } from '../config.js?v=20260802-signal-orange';
 import { escapeHtml } from '../lib/format.js';
 
 export function render(current) {

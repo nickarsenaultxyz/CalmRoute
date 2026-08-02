@@ -9,8 +9,8 @@
 
 import {
   EXISTING_ONLY_NOTE, LTS, LTS_ORDER_LEGEND,
-} from '../config.js?v=20260731-solid-lines';
-import { swatchSvg } from '../layers.js?v=20260731-solid-lines';
+} from '../config.js?v=20260802-signal-orange';
+import { swatchSvg } from '../layers.js?v=20260802-signal-orange';
 import { escapeHtml } from '../lib/format.js';
 
 export function render(stats, state) {

@@ -2,7 +2,7 @@
 
 import {
   FAC_CONNECTOR, LAYERS, LTS, SOURCES,
-} from './config.js?v=20260731-solid-lines';
+} from './config.js?v=20260802-signal-orange';
 
 export const layerId = (e) => `${e.src}-lts${e.lts}`;
 
@@ -100,9 +100,8 @@ export function addLayers(map) {
         filter,
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
-          // Paper-coloured casing so lines sit on the notebook page, not on
-          // a white halo the ground no longer has.
-          'line-color': 'rgba(251,248,240,0.85)',
+          // A cool light casing separates status colours from the light tiles.
+          'line-color': 'rgba(248,250,252,0.90)',
           'line-width': widthExpr(base + 2.4),
           // A halo is noise when the city fits on screen.
           'line-opacity': casingOpacity(),
@@ -206,7 +205,7 @@ export function addRouteLayers(map) {
     id: 'route-casing', type: 'line', source: 'route',
     layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: {
-      'line-color': '#fbf8f0',
+      'line-color': '#f8fafc',
       'line-width': ['case',
         ['==', ['get', 'bike_infra'], 1],
         ROUTE_FACILITY_CASING_WIDTH,
@@ -237,17 +236,17 @@ export function addRouteLayers(map) {
     layout: { 'line-cap': 'round' },
     paint: {
       // Thin neutral access line: visible, but distinct from the coloured ride.
-      'line-color': '#6f6858', 'line-width': 3.5, 'line-opacity': 0.9,
+      'line-color': '#64748b', 'line-width': 3.5, 'line-opacity': 0.9,
     },
   });
   map.addLayer({
     id: 'route-endpoints', type: 'circle', source: 'route-endpoints',
     paint: {
-      // Ink start (A), terracotta destination (B) — matching the panel's
+      // Near-black start (A), signal-amber destination (B), matching the panel's
       // from/to pins.
       'circle-radius': 8,
-      'circle-color': ['match', ['get', 'role'], 'from', '#211e18', '#b3491c'],
-      'circle-stroke-color': '#f4f0e6',
+      'circle-color': ['match', ['get', 'role'], 'from', '#172536', '#ff9f1c'],
+      'circle-stroke-color': '#f8fafc',
       'circle-stroke-width': 3,
     },
   });

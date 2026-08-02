@@ -8,7 +8,7 @@
 
 import {
   FAC_PUBLIC, LTS,
-} from '../config.js?v=20260731-solid-lines';
+} from '../config.js?v=20260802-signal-orange';
 import { escapeHtml, miles as fmtMiles, minutes } from '../lib/format.js';
 
 const POINT = {
@@ -385,7 +385,8 @@ function mapPinIcon() {
 
 function swapIcon() {
   return `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M8 4 5 7l3 3M5 7h10M16 20l3-3-3-3M19 17H9"></path></svg>`;
+    <path d="M7.5 19.5v-15m0 0L4 8M7.5 4.5 11 8
+             M16.5 4.5v15m0 0 3.5-3.5M16.5 19.5 13 16"></path></svg>`;
 }
 
 let refocus = null;

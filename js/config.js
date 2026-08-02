@@ -1,28 +1,26 @@
 /**
  * Single source of truth for palette, layer order, and public-facing copy.
  *
- * The palette, weights and opacities are ported from the previous map's
- * LTS_COLORS / LTS_WEIGHTS / LTS_OPACITY, which had been tuned by eye over
- * several iterations. The draw order preserves that version's deliberate fix of
- * painting low-stress on top of the grey context roads.
+ * The palette is the Transit control status ramp from the design record,
+ * darkened slightly where necessary to remain legible on the production light
+ * basemap. The draw order keeps low-stress streets above context roads.
  */
 
 export const DATA_DIR = './data/';
 
 /** LTS 0-4. There is no LTS 5; see params.toml.
- *  Colours are the Field notebook calm->stressful ramp (pencil green, deep
- *  green, amber, rust); LTS 0 is a warm neutral that recedes into the paper.
+ *  Colours use Transit control's mint, teal, signal amber and coral ramp.
  *  The rating semantics and widths are unchanged from the previous palette. */
 export const LTS = {
-  0: { color: '#8f8674', width: 2.0, opacity: 0.50,
+  0: { color: '#68788b', width: 2.0, opacity: 0.50,
        short: 'Bikes not permitted', detail: 'Interstate or parkway' },
-  1: { color: '#7d9e64', width: 5.0, opacity: 0.95,
+  1: { color: '#279b65', width: 5.0, opacity: 0.95,
        short: 'Relaxed', detail: 'Good for kids and new riders' },
-  2: { color: '#3d6b4a', width: 5.0, opacity: 0.95,
+  2: { color: '#126f57', width: 5.0, opacity: 0.95,
        short: 'Comfortable for most adults', detail: 'Quiet streets and bike lanes' },
-  3: { color: '#c98a1e', width: 4.0, opacity: 0.90,
+  3: { color: '#ff9f1c', width: 4.0, opacity: 0.90,
        short: 'Busy', detail: 'For confident riders' },
-  4: { color: '#a33b1f', width: 4.0, opacity: 0.85,
+  4: { color: '#d6423d', width: 4.0, opacity: 0.88,
        short: 'Stressful', detail: 'Experienced riders only' },
 };
 
