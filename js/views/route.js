@@ -38,18 +38,27 @@ export function render(state, stats, mapState) {
 }
 
 function searchBox(state) {
+  const activePoint = state.picking ? POINT[state.picking] : null;
+
   return `
-    <section class="box route-search-box" aria-label="Route locations">
-      ${locationRow(state, 'from')}
-      ${locationRow(state, 'to')}
-      <div class="route-map-pickers" aria-label="Choose route locations on the map">
-        ${mapPicker(state, 'from')}
-        ${mapPicker(state, 'to')}
+    <section class="route-search-box" aria-label="Route locations">
+      <div class="box route-location-card">
+        ${locationRow(state, 'from')}
+        <div class="route-swap-row">
+          <button class="btn btn-icon route-swap" type="button"
+                  data-route-action="swap"
+                  aria-label="Swap start and destination"
+                  ${state.from && state.to ? '' : 'disabled'}>${swapIcon()}</button>
+        </div>
+        ${locationRow(state, 'to')}
+        <div class="route-location-help">
+          <p>${activePoint
+            ? `Tap the map to set the ${activePoint.label.toLowerCase()}.`
+            : 'Type an address and press Enter, or use a pin button to choose on the map.'}</p>
+          <button class="btn ghost route-clear" type="button"
+                  data-route-action="clear">Clear</button>
+        </div>
       </div>
-      ${state.from || state.to
-        ? '<button class="btn ghost route-clear" type="button" '
-          + 'data-route-action="clear">Clear both locations</button>'
-        : ''}
       ${state.screen === 'explore' ? `
         <button class="btn primary route-find" type="button"
                 data-route-action="find"
@@ -58,7 +67,7 @@ function searchBox(state) {
         </button>` : ''}
     </section>
     <p class="route-geocoder-note">
-      Press Enter or use the search button to resolve an address through
+      Address search uses
       <a href="https://nominatim.openstreetmap.org/" target="_blank"
          rel="noopener">OpenStreetMap Nominatim</a>.
     </p>`;
@@ -73,10 +82,11 @@ function mapPicker(state, which) {
       ? `Move ${point.label.toLowerCase()} on map`
       : `Choose ${point.label.toLowerCase()} on map`;
   return `
-    <button class="route-map-pick ${which}" type="button" data-point="${which}"
+    <button class="route-map-pick ${which}" type="button"
+            data-point="${which}" aria-label="${action}" title="${action}"
             aria-pressed="${active}">
-      <span class="route-map-pick-pin" aria-hidden="true">${point.letter}</span>
-      <span>${action}</span>
+      ${mapPinIcon()}
+      <span class="visually-hidden">${action}</span>
     </button>`;
 }
 
@@ -92,27 +102,24 @@ function locationRow(state, which) {
     </button>`).join('');
 
   return `
-    <div class="route-location">
-      <form class="ab-row" data-location-form="${which}">
-        <span class="route-pin ${which}" aria-hidden="true">${POINT[which].letter}</span>
-        <label class="visually-hidden" for="location-${which}">${POINT[which].label}</label>
-        <input class="input" id="location-${which}" type="search"
-               autocomplete="street-address" enterkeyhint="search"
-               data-location-input="${which}" value="${escapeHtml(query)}"
-               placeholder="${POINT[which].label} address or place">
-        <button class="btn btn-icon route-search-submit" type="submit"
-                aria-label="Search for ${POINT[which].label.toLowerCase()}"
-                ${pending ? 'disabled' : ''}>${pending ? '…' : searchIcon()}</button>
-        ${which === 'to' ? `
-          <button class="btn btn-icon" type="button" data-route-action="swap"
-                  aria-label="Swap start and destination"
-                  ${state.from && state.to ? '' : 'disabled'}>${swapIcon()}</button>` : ''}
-      </form>
-      ${search.message ? `<p class="location-status ${
-        search.status === 'error' ? 'error' : ''}" role="status">${
-        escapeHtml(search.message)}</p>` : ''}
-      ${matches ? `<div class="location-results"
-        aria-label="${POINT[which].label} location matches">${matches}</div>` : ''}
+    <div class="route-location ${which}">
+      <div class="route-location-main">
+        <form class="ab-row" data-location-form="${which}">
+          <span class="route-pin ${which}" aria-hidden="true">${POINT[which].letter}</span>
+          <label class="visually-hidden" for="location-${which}">${POINT[which].label}</label>
+          <input class="input" id="location-${which}" type="search"
+                 autocomplete="street-address" enterkeyhint="search"
+                 data-location-input="${which}" value="${escapeHtml(query)}"
+                 placeholder="${which === 'from' ? 'Start address' : 'Destination'}"
+                 ${pending ? 'disabled' : ''}>
+        </form>
+        ${search.message ? `<p class="location-status ${
+          search.status === 'error' ? 'error' : ''}" role="status">${
+          escapeHtml(search.message)}</p>` : ''}
+        ${matches ? `<div class="location-results"
+          aria-label="${POINT[which].label} location matches">${matches}</div>` : ''}
+      </div>
+      ${mapPicker(state, which)}
     </div>`;
 }
 
@@ -370,9 +377,10 @@ function routeIcon() {
     <path d="M8.5 18H14a4 4 0 0 0 0-8H9"></path></svg>`;
 }
 
-function searchIcon() {
+function mapPinIcon() {
   return `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <circle cx="10.5" cy="10.5" r="5.5"></circle><path d="m15 15 4 4"></path></svg>`;
+    <path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"></path>
+    <circle cx="12" cy="10" r="2.5"></circle></svg>`;
 }
 
 function swapIcon() {

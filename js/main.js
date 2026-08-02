@@ -24,7 +24,7 @@ import * as browse from './views/browse.js?v=20260731-field-notebook';
 import * as detail from './views/detail.js?v=20260801-compact-inspector';
 import * as legend from './views/legend.js?v=20260731-solid-lines';
 import * as methodology from './views/methodology.js?v=20260731-uk-campus';
-import * as routeView from './views/route.js?v=20260802-map-pickers';
+import * as routeView from './views/route.js?v=20260802-search-card';
 import * as settings from './views/settings.js?v=20260731-field-notebook';
 import * as share from './views/share.js?v=20260731-routing-focus';
 
@@ -52,7 +52,7 @@ const app = window.__lexbike = {
   contextPromise: null,
   route: {
     from: null, to: null,
-    picking: 'from',
+    picking: null,
     screen: 'explore',
     selected: 'balanced',
     sliderValue: 50,
@@ -213,6 +213,7 @@ function showRoute({ push = true } = {}) {
   routeView.mount(body, {
     onPick: (which) => {
       app.route.picking = app.route.picking === which ? null : which;
+      app.map.getCanvas().style.cursor = app.route.picking ? 'crosshair' : '';
       announce(app.route.picking
         ? `Tap the map to set the ${which === 'from' ? 'start' : 'destination'}.`
         : 'Cancelled.');
@@ -226,7 +227,8 @@ function showRoute({ push = true } = {}) {
     onFind: recomputeRoute,
     onClearBoth: () => {
       app.route.from = app.route.to = null;
-      app.route.picking = 'from';
+      app.route.picking = null;
+      app.map.getCanvas().style.cursor = '';
       app.route.locationSearch = {
         from: { query: '', status: 'idle', results: [], message: '' },
         to: { query: '', status: 'idle', results: [], message: '' },
@@ -397,6 +399,7 @@ async function recomputeRoute() {
   app.route.candidates = [];
   app.route.result = { kind: 'pending' };
   app.route.picking = null;
+  app.map.getCanvas().style.cursor = '';
   showRoute({ push: false });
 
   let g;
@@ -733,7 +736,8 @@ function setRoutePoint(which, lngLat) {
   app.route.locationSearch[which].status = 'idle';
   app.route.locationSearch[which].results = [];
   app.route.locationSearch[which].message = '';
-  app.route.picking = which === 'from' && !app.route.to ? 'to' : null;
+  app.route.picking = null;
+  app.map.getCanvas().style.cursor = '';
   updateRouteEndpoints();
   resetRouteResults();
   showRoute({ push: false });
@@ -772,6 +776,7 @@ async function searchRouteLocation(which, query) {
   search.request = request;
   search.status = 'pending';
   app.route.picking = null;
+  app.map.getCanvas().style.cursor = '';
   showRoute({ push: false });
 
   try {
@@ -843,7 +848,8 @@ function installInteraction(map) {
     if (app.hovered) map.setFeatureState(app.hovered, { hover: false });
     app.hovered = { source: f.source, id: f.id };
     map.setFeatureState(app.hovered, { hover: true });
-    map.getCanvas().style.cursor = 'pointer';
+    map.getCanvas().style.cursor =
+      app.state.view === 'route' && app.route.picking ? 'crosshair' : 'pointer';
 
     els.hover.innerHTML = detail.hoverHtml(f.properties || {});
     els.hover.hidden = false;
@@ -855,7 +861,8 @@ function installInteraction(map) {
   map.on('mouseleave', layers, () => {
     if (app.hovered) map.setFeatureState(app.hovered, { hover: false });
     app.hovered = null;
-    map.getCanvas().style.cursor = '';
+    map.getCanvas().style.cursor =
+      app.state.view === 'route' && app.route.picking ? 'crosshair' : '';
     els.hover.hidden = true;
   });
 
