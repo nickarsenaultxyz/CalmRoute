@@ -204,7 +204,7 @@ function showMethodology({ push = true } = {}) {
 function showRoute({ push = true } = {}) {
   app.state.view = 'route';
   const body = app.panel.show({
-    title: 'Calmroute',
+    title: 'CalmRoute',
     root: true,
     view: 'route',
     html: routeView.render(app.route, app.stats, app.state),

@@ -106,7 +106,7 @@ export function mount(root, { stats, segment, council, announce } = {}) {
     // fall through to the clipboard rather than failing silently.
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'Lexington Bike Route Planner', text, url });
+        await navigator.share({ title: 'CalmRoute', text, url });
         return;
       } catch (err) {
         if (err?.name === 'AbortError') return;   // user dismissed the sheet

@@ -1,5 +1,5 @@
 /**
- * Calmroute route planner.
+ * CalmRoute route planner.
  *
  * This keeps the supplied Field Notebook reference's information architecture
  * while using the real Lexington graph: search first, compare three actual

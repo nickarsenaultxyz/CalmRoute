@@ -98,7 +98,7 @@ def test_router_uses_one_cache_key_for_its_graph_runtime():
 
     assert "import('./lib/graph.js')" not in main
     assert "from './lib/graph.js?v=20260731-routing-runtime'" in main
-    assert 'src="./js/main.js?v=20260801-compact-inspector"' in index
+    assert 'src="./js/main.js?v=20260802-calmroute-brand"' in index
 
 
 def test_location_search_is_submit_only_bounded_and_rate_limited():
@@ -241,6 +241,21 @@ def test_street_inspector_contains_details_without_route_or_share_actions():
     assert "contact your council member" not in detail
     assert "Rated from the street type" not in detail
     assert 'class="note"' not in detail
+
+
+def test_calmroute_brand_uses_the_supplied_logo_and_exact_name():
+    """The app bar and browser metadata must present one consistent brand."""
+    index = Path("index.html").read_text()
+    main = Path("js/main.js").read_text()
+    share = Path("js/views/share.js").read_text()
+
+    assert Path("assets/calmroute-logo.png").is_file()
+    assert 'src="./assets/calmroute-logo.png"' in index
+    assert "<title>CalmRoute —" in index
+    assert '<h1 id="panel-title">CalmRoute</h1>' in index
+    assert "title: 'CalmRoute'" in main
+    assert "title: 'CalmRoute'" in share
+    assert "Calmroute" not in index + main + share
 
 
 # --------------------------------------------------------------------------

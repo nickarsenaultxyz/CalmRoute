@@ -5,7 +5,7 @@
 :root {
   /* Field notebook — warm paper ground, terracotta accent, sage second voice,
      Spectral over IBM Plex Mono, near-square corners and hard offset shadows.
-     Ported from the Calmroute design mockup's default theme. */
+     Ported from the CalmRoute design mockup's default theme. */
   --bg: #e7e1d2;          /* sand: page ground + inset/hover fills */
   --surface: #f4f0e6;     /* paper: the panel and cards sit on this */
   --ink: #211e18;
@@ -149,7 +149,7 @@ html, body {
   border-radius: 999px; background: var(--line);
 }
 
-/* App bar — a persistent brand mark (bike glyph in a sage dot) beside the
+/* App bar — the persistent CalmRoute mark beside the
    per-view title, with the back affordance to its left on sub-views. */
 .appbar {
   display: flex; align-items: center; gap: 9px;
@@ -158,11 +158,16 @@ html, body {
   border-bottom: var(--bw) solid var(--line);
 }
 .brand-dot {
-  flex: 0 0 auto; width: 24px; height: 24px;
-  display: grid; place-items: center;
-  border-radius: var(--radius); background: var(--accent-2); color: var(--surface);
+  flex: 0 0 auto; width: 36px; height: 36px;
+  display: block; overflow: hidden;
+  border-radius: 50%; background: var(--surface);
 }
-.brand-dot svg { width: 15px; height: 15px; display: block; }
+.brand-dot img {
+  width: 100%; height: 100%; display: block;
+  transform: scale(1.72);
+  transform-origin: 43% 37%;
+  mix-blend-mode: multiply;
+}
 .appbar h1 {
   margin: 0; font-size: 17px; font-weight: 600; letter-spacing: .01em;
   font-family: var(--font-heading, var(--font-body));
@@ -549,7 +554,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 
 /* ------------------------------------------------ mockup panel components
 
-   Ported from the Calmroute design's panel so the live panel reads as the same
+   Ported from the CalmRoute design's panel so the live panel reads as the same
    system: surface boxes, tag chips, a key/value list, and a leg/list step row. */
 
 .box {
@@ -630,7 +635,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .stress-pref .pref-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
 .stress-pref .pref-head .grow { flex: 1 1 auto; }
 
-/* -------------------------------------------------- Calmroute route planner
+/* -------------------------------------------------- CalmRoute route planner
 
    This is the supplied Field Notebook side-panel composition, adapted to the
    real MapLibre app. No sample route, report, climb, or account data from the
@@ -884,8 +889,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
   }
   #panel[data-view="route"] .appbar { padding: 14px 18px; }
   #panel[data-view="route"] .appbar h1 { font-size: 20px; }
-  #panel[data-view="route"] .brand-dot { width: 28px; height: 28px; }
-  #panel[data-view="route"] .brand-dot svg { width: 17px; height: 17px; }
+  #panel[data-view="route"] .brand-dot { width: 40px; height: 40px; }
   .appbar { padding: 11px 16px; }
   .panel-body { padding: 0 16px 18px; }
   #panel[data-view="route"] .panel-body { padding: 0 18px 22px; }
