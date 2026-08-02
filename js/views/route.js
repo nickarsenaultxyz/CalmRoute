@@ -163,28 +163,26 @@ function preference(state, chosen) {
   const comparison = chosen.key === 'fastest'
     ? `${fmtMiles(chosen.severeMiles)} of this route is LTS 4.`
     : `Costs <b>+${extraMinutes} min</b> and <b>+${
-      fmtMiles(extraMiles)}</b> — ${
+      fmtMiles(extraMiles)}</b>, and ${
       stressChange > 0.01
-        ? `cuts high-stress riding by <b>${fmtMiles(stressChange)}</b>.`
+        ? `cuts high-stress riding from <b>${fmtMiles(fastest.stressMiles)}</b> `
+          + `to <b>${fmtMiles(chosen.stressMiles)}</b>.`
         : `uses <b>${fmtMiles(chosen.stressMiles)}</b> of LTS 3–4 streets.`
     }`;
 
   return `
-    <div class="box route-preference">
-      <div class="pref-head">
-        <span class="eyebrow">Comfort vs. speed</span>
-        <span class="grow"></span>
-        <span class="tag ${chosen.worstLts >= 4 ? 'tag-accent' : 'tag-accent-2'}">
-          ${escapeHtml(PRESETS[chosen.key]?.label || chosen.label)}
-        </span>
+    <section class="route-preference-section"
+             aria-labelledby="route-preference-heading">
+      <h2 class="eyebrow" id="route-preference-heading">How calm do you want it?</h2>
+      <div class="box route-preference">
+        <input class="range" type="range" min="0" max="100" step="1"
+               value="${state.sliderValue ?? PRESETS[chosen.key]?.slider ?? 50}"
+               data-route-slider aria-label="How calm do you want it?"
+               aria-valuetext="${escapeHtml(PRESETS[chosen.key]?.label || chosen.label)}">
+        <div class="range-ends"><span>Calmest</span><span>Fastest</span></div>
+        <p>${comparison}</p>
       </div>
-      <input class="range" type="range" min="0" max="100" step="1"
-             value="${PRESETS[chosen.key]?.slider ?? 50}"
-             data-route-slider aria-label="Comfort versus speed"
-             aria-valuetext="${escapeHtml(PRESETS[chosen.key]?.label || chosen.label)}">
-      <div class="range-ends"><span>Calmest</span><span>Fastest</span></div>
-      <p>${comparison}</p>
-    </div>`;
+    </section>`;
 }
 
 function routeCard(candidate, active) {
@@ -443,10 +441,18 @@ export function mount(root, handlers, state) {
     });
   });
 
-  root.querySelector('[data-route-slider]')?.addEventListener('change', (event) => {
+  const routeSlider = root.querySelector('[data-route-slider]');
+  routeSlider?.addEventListener('input', (event) => {
+    const value = Number(event.currentTarget.value);
+    const key = value < 34 ? 'calmest' : value < 70 ? 'balanced' : 'fastest';
+    event.currentTarget.setAttribute('aria-valuetext', PRESETS[key].label);
+    handlers.onSliderPreview?.(value);
+  });
+  routeSlider?.addEventListener('change', (event) => {
     refocus = '[data-route-slider]';
     const value = Number(event.currentTarget.value);
-    handlers.onPreset?.(value < 34 ? 'calmest' : value < 70 ? 'balanced' : 'fastest');
+    const key = value < 34 ? 'calmest' : value < 70 ? 'balanced' : 'fastest';
+    handlers.onSlider?.(value, key);
   });
 
   root.querySelectorAll('[data-route-lts]').forEach((button) => {

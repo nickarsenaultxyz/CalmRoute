@@ -24,7 +24,7 @@ import * as browse from './views/browse.js?v=20260731-field-notebook';
 import * as detail from './views/detail.js?v=20260801-compact-inspector';
 import * as legend from './views/legend.js?v=20260731-solid-lines';
 import * as methodology from './views/methodology.js?v=20260731-uk-campus';
-import * as routeView from './views/route.js?v=20260731-solid-lines';
+import * as routeView from './views/route.js?v=20260802-calm-control';
 import * as settings from './views/settings.js?v=20260731-field-notebook';
 import * as share from './views/share.js?v=20260731-routing-focus';
 
@@ -55,6 +55,7 @@ const app = window.__lexbike = {
     picking: 'from',
     screen: 'explore',
     selected: 'balanced',
+    sliderValue: 50,
     candidates: [],
     result: null,
     locationSearch: {
@@ -248,6 +249,10 @@ function showRoute({ push = true } = {}) {
       else showRoute({ push: false });
     },
     onPreset: selectRouteCandidate,
+    onSliderPreview: (value) => {
+      app.route.sliderValue = Math.max(0, Math.min(100, value));
+    },
+    onSlider: (value, key) => selectRouteCandidate(key, value),
     onDetail: () => {
       if (!app.route.result || app.route.result.kind !== 'ok') return;
       app.route.screen = 'detail';
@@ -479,9 +484,13 @@ function resetRouteResults() {
   drawRoute(null);
 }
 
-function selectRouteCandidate(key) {
+function selectRouteCandidate(key, sliderValue) {
   const candidate = app.route.candidates.find((route) => route.key === key);
   if (!candidate) return;
+  const presetPosition = { calmest: 0, balanced: 50, fastest: 100 };
+  app.route.sliderValue = sliderValue == null
+    ? (presetPosition[key] ?? 50)
+    : Math.max(0, Math.min(100, sliderValue));
   app.route.selected = key;
   app.route.result = { kind: 'ok', ...candidate };
   app.route.screen = 'results';

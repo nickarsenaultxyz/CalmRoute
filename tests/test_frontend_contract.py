@@ -98,7 +98,7 @@ def test_router_uses_one_cache_key_for_its_graph_runtime():
 
     assert "import('./lib/graph.js')" not in main
     assert "from './lib/graph.js?v=20260731-routing-runtime'" in main
-    assert 'src="./js/main.js?v=20260802-calmroute-brand"' in index
+    assert 'src="./js/main.js?v=20260802-calm-control"' in index
 
 
 def test_location_search_is_submit_only_bounded_and_rate_limited():
@@ -256,6 +256,21 @@ def test_calmroute_brand_uses_the_supplied_logo_and_exact_name():
     assert "title: 'CalmRoute'" in main
     assert "title: 'CalmRoute'" in share
     assert "Calmroute" not in index + main + share
+
+
+def test_calmness_slider_is_continuous_while_routes_remain_three_presets():
+    """Dragging must not snap the thumb to 0, 50, or 100."""
+    main = Path("js/main.js").read_text()
+    route = Path("js/views/route.js").read_text()
+
+    assert "sliderValue: 50" in main
+    assert "value=\"${state.sliderValue ??" in route
+    assert "addEventListener('input'" in route
+    assert "handlers.onSliderPreview?.(value)" in route
+    assert "addEventListener('change'" in route
+    assert "handlers.onSlider?.(value, key)" in route
+    assert "selectRouteCandidate(key, value)" in main
+    assert "sliderValue == null" in main
 
 
 # --------------------------------------------------------------------------

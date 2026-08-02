@@ -738,41 +738,49 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
   display: flex; align-items: center; gap: 9px;
   color: var(--ink-soft);
 }
-.route-preference .pref-head {
-  display: flex; align-items: center; gap: 8px; margin-bottom: 2px;
+.route-preference-section {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.route-preference-section > h2 {
+  margin: 0; font-weight: 500;
+}
+.route-preference {
+  padding: 18px !important;
 }
 .route-preference p {
-  margin: 8px 0 0 !important; color: var(--ink-soft);
-  font-size: 13.5px !important; line-height: 1.5;
+  margin: 13px 0 0 !important; color: var(--ink);
+  font-size: 15px !important; line-height: 1.55;
 }
 .range {
   -webkit-appearance: none; appearance: none;
-  width: 100%; height: 24px; background: transparent; cursor: grab;
+  width: 100%; height: 34px; margin: 0;
+  background: transparent; cursor: grab;
 }
 .range::-webkit-slider-runnable-track {
-  height: 6px; border-radius: var(--radius);
+  height: 8px; border-radius: var(--radius);
   border: var(--bw) solid var(--line);
   background: linear-gradient(90deg,
     var(--lts1), var(--lts2) 38%, var(--lts3) 70%, var(--lts4));
 }
 .range::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 16px; height: 22px; margin-top: -9px;
+  -webkit-appearance: none; width: 24px; height: 32px; margin-top: -13px;
   border-radius: var(--radius-sm); background: var(--surface);
   border: 2px solid var(--ink); box-shadow: var(--shadow);
 }
 .range:active::-webkit-slider-thumb { border-color: var(--accent); }
 .range::-moz-range-track {
-  height: 6px; border-radius: var(--radius);
+  height: 8px; border-radius: var(--radius);
   border: var(--bw) solid var(--line);
   background: linear-gradient(90deg,
     var(--lts1), var(--lts2) 38%, var(--lts3) 70%, var(--lts4));
 }
 .range::-moz-range-thumb {
-  width: 14px; height: 20px; border-radius: var(--radius-sm);
+  width: 22px; height: 30px; border-radius: var(--radius-sm);
   background: var(--surface); border: 2px solid var(--ink);
 }
 .range-ends {
   display: flex; justify-content: space-between;
+  margin-top: 1px;
   color: var(--ink-soft); font: 10.5px/1.3 var(--font-mono);
   letter-spacing: .1em; text-transform: uppercase;
 }
