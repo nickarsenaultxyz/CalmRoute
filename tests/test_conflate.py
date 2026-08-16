@@ -208,6 +208,42 @@ def test_named_corridor_reaches_both_carriageways_but_not_another_road():
     assert out["fac_source_ids"].tolist() == [[207], []]
 
 
+def test_reviewed_assignment_repairs_shropshire_split_without_broadening_buffer():
+    streets = gpd.GeoDataFrame(
+        {
+            "id": [13616, 13617, 99999],
+            "rdclass": [5, 5, 5],
+            "road_name": ["Shropshire Ave", "Shropshire Ave", "Nearby Rd"],
+        },
+        geometry=[
+            LineString([(0, 25), (100, 25)]),
+            LineString([(0, -25), (100, -25)]),
+            LineString([(0, 24), (100, 24)]),
+        ],
+        crs=32616,
+    )
+    facilities = gpd.GeoDataFrame(
+        {
+            "id_src": [106],
+            "on_road": [True],
+            "fac": ["lane"],
+            "network_name": ["Shropshire Ave"],
+        },
+        geometry=[LineString([(0, 0), (100, 0)])],
+        crs=32616,
+    )
+
+    out = conflate_on_road(
+        streets,
+        facilities,
+        params_mod.load(),
+        check_quality=False,
+    )
+
+    assert out["fac"].tolist() == ["lane", "lane", "none"]
+    assert out["fac_source_ids"].tolist() == [[106], [106], []]
+
+
 def test_local_bearing_still_rejects_a_perpendicular_crossing():
     street = LineString([(-20, 0), (20, 0)])
     facility = LineString([(0, -20), (0, 20)])

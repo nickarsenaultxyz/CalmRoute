@@ -354,16 +354,132 @@ def conflate_on_road(
     out["fac"] = assigned
     out["fac_source_ids"] = source_ids
 
+    reviewed_count = _apply_reviewed_on_road_assignments(
+        out,
+        st,
+        on_road,
+        params,
+        rank,
+        strict=check_quality,
+    )
+
     log.info(
         "conflation: %d centrelines received a facility "
         "(%d candidates rejected on bearing, %d on coverage)",
         int((out["fac"] != "none").sum()), skipped_bearing, skipped_coverage,
     )
     log.info("conflated facility mix: %s", out["fac"].value_counts().to_dict())
+    if reviewed_count:
+        log.info(
+            "conflation: applied %d reviewed on-road facility assignment(s)",
+            reviewed_count,
+        )
 
     if check_quality:
         _check_mileage(out, on_road, params)
     return out
+
+
+def _apply_reviewed_on_road_assignments(
+    out: gpd.GeoDataFrame,
+    streets_m: gpd.GeoDataFrame,
+    on_road_m: gpd.GeoDataFrame,
+    params: Params,
+    rank: dict,
+    *,
+    strict: bool,
+) -> int:
+    """Apply narrowly audited facility-to-centreline corrections.
+
+    These are for a known geometry-reconciliation failure, not a second generic
+    matching system. Every correction identifies one LFUCG facility record and
+    exact SCLINK targets, then validates category, corridor name, and proximity.
+    Production conflation is strict so upstream source drift stops the build.
+    Small fixture/scenario passes may omit the reviewed source entirely.
+    """
+    assignments = params.get("conflation.reviewed_on_road_assignments", [])
+    if not assignments:
+        return 0
+
+    source_rows = {
+        int(source_id): i
+        for i, source_id in enumerate(on_road_m["id_src"])
+    }
+    street_rows = {
+        int(street_id): i
+        for i, street_id in enumerate(streets_m["id"])
+    }
+    applied = 0
+
+    for assignment in assignments:
+        label = str(assignment["name"])
+        source_id = int(assignment["source_id"])
+        source_i = source_rows.get(source_id)
+        if source_i is None:
+            if strict:
+                raise ConflationError(
+                    f"reviewed assignment {label!r}: source facility "
+                    f"{source_id} is missing from the existing on-road layer"
+                )
+            continue
+
+        expected_fac = str(assignment["facility"])
+        actual_fac = str(on_road_m.at[source_i, "fac"])
+        if actual_fac != expected_fac:
+            raise ConflationError(
+                f"reviewed assignment {label!r}: source facility {source_id} "
+                f"changed from {expected_fac!r} to {actual_fac!r}"
+            )
+
+        expected_name = _name_key(assignment["street_name"])
+        actual_source_name = _name_key(on_road_m.at[source_i, "network_name"])
+        if actual_source_name != expected_name:
+            raise ConflationError(
+                f"reviewed assignment {label!r}: source facility {source_id} "
+                f"corridor changed from {expected_name!r} to "
+                f"{actual_source_name!r}"
+            )
+
+        source_geometry = on_road_m.geometry.values[source_i]
+        max_distance = float(assignment["max_distance_m"])
+        for street_id_raw in assignment["street_ids"]:
+            street_id = int(street_id_raw)
+            street_i = street_rows.get(street_id)
+            if street_i is None:
+                raise ConflationError(
+                    f"reviewed assignment {label!r}: target street "
+                    f"{street_id} is missing"
+                )
+
+            actual_street_name = _name_key(streets_m.at[street_i, "road_name"])
+            if actual_street_name != expected_name:
+                raise ConflationError(
+                    f"reviewed assignment {label!r}: target street {street_id} "
+                    f"changed from {expected_name!r} to {actual_street_name!r}"
+                )
+
+            distance = streets_m.geometry.values[street_i].distance(source_geometry)
+            if distance > max_distance:
+                raise ConflationError(
+                    f"reviewed assignment {label!r}: target street {street_id} "
+                    f"is {distance:.1f} m from source {source_id}, beyond the "
+                    f"reviewed {max_distance:.1f} m limit"
+                )
+
+            out_i = out.index[street_i]
+            current_fac = str(out.at[out_i, "fac"])
+            best = resolve_facility([current_fac, expected_fac], rank)
+            if best == expected_fac:
+                if current_fac == expected_fac:
+                    ids = set(out.at[out_i, "fac_source_ids"])
+                    ids.add(source_id)
+                    out.at[out_i, "fac_source_ids"] = sorted(ids)
+                else:
+                    out.at[out_i, "fac"] = expected_fac
+                    out.at[out_i, "fac_source_ids"] = [source_id]
+                applied += 1
+
+    return applied
 
 
 def _group_by(values, indices: list[int]):

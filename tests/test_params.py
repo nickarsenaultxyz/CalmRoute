@@ -101,6 +101,17 @@ def test_reviewed_connectors_are_narrowly_scoped():
     assert max(c["max_m"] for c in connectors) <= 90
 
 
+def test_reviewed_on_road_assignments_are_narrowly_scoped():
+    p = params_mod.load()
+    assignments = p["conflation.reviewed_on_road_assignments"]
+
+    assert len(assignments) == 1
+    assert assignments[0]["source_id"] == 106
+    assert set(assignments[0]["street_ids"]) == {13616, 13617}
+    assert assignments[0]["facility"] == "lane"
+    assert assignments[0]["max_distance_m"] <= 30
+
+
 def test_aadt_model_excludes_underrepresented_local_streets():
     p = params_mod.load()
     assert set(p["aadt.model.eligible_rdclasses"]) == {1, 2, 3, 4, 5}

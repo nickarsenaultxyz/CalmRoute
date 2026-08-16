@@ -341,6 +341,21 @@ attach_merge_m = 0.75
 # router somewhere to turn off. OSM's longest imported way was 7.5 mi.
 max_path_edge_m = 800.0
 
+# The city bike layer represents this continuous lane with one centreline, but
+# Shropshire splits into two one-way LFUCG street centrelines around this block.
+# Both diverge too far from the independently digitized facility line to pass
+# the normal 16 m / 55% match. Scope the correction to the audited source and
+# target ids; a source/type/name change or a target farther than 30 m fails the
+# build instead of silently applying stale local knowledge.
+[[conflation.reviewed_on_road_assignments]]
+name = "Shropshire Avenue split carriageways"
+source_id = 106
+facility = "lane"
+street_ids = [13616, 13617]
+street_name = "Shropshire Ave"
+max_distance_m = 30.0
+why = "LFUCG record 106 says the existing bike lane continues from E Fifth St to past E Sixth St."
+
 # Individually reviewed campus cut-throughs that are longer than the ordinary
 # 25 m verge/curb connector. These remain explicit so a global tolerance change
 # cannot manufacture similar shortcuts elsewhere. The source coordinate only
