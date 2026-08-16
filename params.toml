@@ -403,6 +403,11 @@ overpass_url = "https://overpass-api.de/api/interpreter"
 # Fayette County, Kentucky. Selecting on the name alone also matches Fayette
 # counties in several other states; the stable OSM relation id is unambiguous.
 relation_id = 130537
+# Locally reviewed false positive: OSM maps a bicycle-designated sidewalk
+# across the Alumni Drive bridge over New Circle Road, but that bicycle
+# crossing is not present. Keep the exclusion tied to the exact OSM way so it
+# cannot suppress nearby paths or future, independently mapped construction.
+excluded_way_ids = [1014019527]
 # University of Kentucky campus multipolygon, retained as provenance for the
 # enclosing campus. Generic walkways are imported only inside the academic-core
 # polygon below.

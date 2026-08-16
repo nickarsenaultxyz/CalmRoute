@@ -92,6 +92,45 @@ def test_bicycle_designated_paths_remain_available_outside_the_academic_core():
     assert result.iloc[0].geometry.coords[0] == (-84.550, 38.050)
 
 
+def test_locally_reviewed_osm_false_positive_is_excluded():
+    params = load()
+    excluded_id = params["osm.excluded_way_ids"][0]
+    payload = {
+        "elements": [
+            {
+                "type": "way",
+                "id": excluded_id,
+                "nodes": [1, 2],
+                "tags": {
+                    "highway": "footway",
+                    "footway": "sidewalk",
+                    "bicycle": "designated",
+                    "bridge": "yes",
+                },
+                "geometry": [
+                    {"lon": -84.4660198, "lat": 37.9958647},
+                    {"lon": -84.4654002, "lat": 37.9955386},
+                ],
+            },
+            {
+                "type": "way",
+                "id": excluded_id + 1,
+                "nodes": [3, 4],
+                "tags": {"highway": "cycleway"},
+                "geometry": [
+                    {"lon": -84.550, "lat": 38.050},
+                    {"lon": -84.549, "lat": 38.050},
+                ],
+            },
+        ]
+    }
+
+    result = _parse(payload, params)
+
+    assert excluded_id not in set(result.osm_id)
+    assert set(result.osm_id) == {excluded_id + 1}
+
+
 def test_explicit_two_way_bicycle_service_road_is_access():
     assert _role({
         "highway": "service",

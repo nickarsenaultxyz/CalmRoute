@@ -166,6 +166,9 @@ def _parse(payload: dict, params: Params) -> gpd.GeoDataFrame | None:
     academic_core = Polygon(params["osm.academic_core_polygon"])
     if not academic_core.is_valid or academic_core.is_empty:
         raise OsmError("configured UK academic-core polygon is invalid")
+    excluded_way_ids = {
+        int(way_id) for way_id in params.get("osm.excluded_way_ids", [])
+    }
     reviewed_street_names = set(
         params.get("osm.required_reviewed_street_names", [])
     )
@@ -174,6 +177,8 @@ def _parse(payload: dict, params: Params) -> gpd.GeoDataFrame | None:
     )
     for el in payload.get("elements", []):
         if el.get("type") != "way" or not el.get("geometry"):
+            continue
+        if el.get("id") in excluded_way_ids:
             continue
         coords = [(p["lon"], p["lat"]) for p in el["geometry"]]
         if len(coords) < 2:
