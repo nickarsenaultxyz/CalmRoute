@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 from shapely.geometry import Polygon, shape
 
+from lexbike import export
 from lexbike.params import load as load_params
 
 DATA = Path("data")
@@ -63,6 +64,22 @@ def test_manifest_has_an_initial_view(manifest):
         "the full build timestamp must be the cache key; a date alone collides "
         "when two source refreshes deploy on the same day"
     )
+
+
+def test_reviewed_on_road_assignments_are_present_in_export(features):
+    """Audited split carriageways must not regress to facility-free gaps."""
+    params = load_params()
+    by_id = {feature["id"]: feature for feature in features}
+
+    for assignment in params["conflation.reviewed_on_road_assignments"]:
+        expected = export.FAC_CODES[assignment["facility"]]
+        for street_id in assignment["street_ids"]:
+            assert street_id in by_id, f"reviewed street {street_id} is not exported"
+            actual = by_id[street_id]["properties"]["fac"]
+            assert actual == expected, (
+                f"reviewed street {street_id} has facility code {actual}, "
+                f"expected {expected} from source {assignment['source_id']}"
+            )
 
 
 def test_router_waits_for_every_geometry_layer_before_drawing():

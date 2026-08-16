@@ -356,6 +356,74 @@ street_name = "Shropshire Ave"
 max_distance_m = 30.0
 why = "LFUCG record 106 says the existing bike lane continues from E Fifth St to past E Sixth St."
 
+# Citywide audit of the same split/offset-centreline failure. Each target is an
+# internal gap: centreline segments carrying the exact same LFUCG source record
+# meet it on distinct boundary nodes, and the entire target remains within the
+# reviewed 30 m source corridor. One-sided candidates at documented facility
+# termini were inspected and deliberately left untreated.
+[[conflation.reviewed_on_road_assignments]]
+name = "Alumni Drive at University Drive (north record)"
+source_id = 14
+facility = "lane"
+street_ids = [14633]
+street_name = "Alumni Dr"
+max_distance_m = 30.0
+why = "Short intersection centreline lies between LFUCG Alumni bike-lane records 14 and 15."
+
+[[conflation.reviewed_on_road_assignments]]
+name = "Alumni Drive split intersection links"
+source_id = 15
+facility = "lane"
+street_ids = [14633, 14640, 14643]
+street_name = "Alumni Dr"
+max_distance_m = 30.0
+why = "Three short intersection links interrupt an otherwise continuous LFUCG bike-lane record."
+
+[[conflation.reviewed_on_road_assignments]]
+name = "Hays Boulevard offset carriageway"
+source_id = 167
+facility = "lane"
+street_ids = [13180]
+street_name = "Hays Blvd"
+max_distance_m = 30.0
+why = "One interior carriageway segment is offset from the continuous Richmond-to-Todds bike-lane record."
+
+[[conflation.reviewed_on_road_assignments]]
+name = "Lansdowne Drive offset carriageway"
+source_id = 149
+facility = "buffered"
+street_ids = [5642, 5644]
+street_name = "Lansdowne Dr"
+max_distance_m = 30.0
+why = "Two interior one-way segments run parallel to the continuous buffered-lane record."
+
+[[conflation.reviewed_on_road_assignments]]
+name = "Polo Club Boulevard Deerhaven-to-Blackford gap"
+source_id = 170
+facility = "buffered"
+street_ids = [13119]
+street_name = "Polo Club Blvd"
+max_distance_m = 30.0
+why = "Interior offset segment is bounded at both ends by centreline segments credited to record 170."
+
+[[conflation.reviewed_on_road_assignments]]
+name = "Polo Club Boulevard Deerhaven-to-Todds gap"
+source_id = 172
+facility = "buffered"
+street_ids = [12295]
+street_name = "Polo Club Blvd"
+max_distance_m = 30.0
+why = "Interior offset segment is bounded at both ends by centreline segments credited to record 172."
+
+[[conflation.reviewed_on_road_assignments]]
+name = "Polo Club Boulevard Man O War-to-Blackford gaps"
+source_id = 173
+facility = "buffered"
+street_ids = [13678, 15329, 15330]
+street_name = "Polo Club Blvd"
+max_distance_m = 30.0
+why = "One offset segment and two short curved junction links interrupt continuous record 173."
+
 # Individually reviewed campus cut-throughs that are longer than the ordinary
 # 25 m verge/curb connector. These remain explicit so a global tolerance change
 # cannot manufacture similar shortcuts elsewhere. The source coordinate only

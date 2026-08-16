@@ -458,12 +458,14 @@ def _apply_reviewed_on_road_assignments(
                     f"changed from {expected_name!r} to {actual_street_name!r}"
                 )
 
-            distance = streets_m.geometry.values[street_i].distance(source_geometry)
-            if distance > max_distance:
+            target_geometry = streets_m.geometry.values[street_i]
+            source_corridor = source_geometry.buffer(max_distance)
+            if not source_corridor.covers(target_geometry):
+                outside = target_geometry.difference(source_corridor).length
                 raise ConflationError(
                     f"reviewed assignment {label!r}: target street {street_id} "
-                    f"is {distance:.1f} m from source {source_id}, beyond the "
-                    f"reviewed {max_distance:.1f} m limit"
+                    f"has {outside:.1f} m outside source {source_id}'s reviewed "
+                    f"{max_distance:.1f} m corridor"
                 )
 
             out_i = out.index[street_i]

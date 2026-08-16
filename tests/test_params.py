@@ -105,11 +105,26 @@ def test_reviewed_on_road_assignments_are_narrowly_scoped():
     p = params_mod.load()
     assignments = p["conflation.reviewed_on_road_assignments"]
 
-    assert len(assignments) == 1
-    assert assignments[0]["source_id"] == 106
-    assert set(assignments[0]["street_ids"]) == {13616, 13617}
-    assert assignments[0]["facility"] == "lane"
-    assert assignments[0]["max_distance_m"] <= 30
+    assert len(assignments) == 8
+    expected = {
+        14: {14633},
+        15: {14633, 14640, 14643},
+        106: {13616, 13617},
+        149: {5642, 5644},
+        167: {13180},
+        170: {13119},
+        172: {12295},
+        173: {13678, 15329, 15330},
+    }
+    actual = {
+        assignment["source_id"]: set(assignment["street_ids"])
+        for assignment in assignments
+    }
+    assert actual == expected
+    assert all(assignment["facility"] in {"lane", "buffered"}
+               for assignment in assignments)
+    assert max(assignment["max_distance_m"] for assignment in assignments) <= 30
+    assert all(assignment.get("why") for assignment in assignments)
 
 
 def test_aadt_model_excludes_underrepresented_local_streets():
