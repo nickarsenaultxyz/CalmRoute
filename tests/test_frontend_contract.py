@@ -115,7 +115,20 @@ def test_router_uses_one_cache_key_for_its_graph_runtime():
 
     assert "import('./lib/graph.js')" not in main
     assert "from './lib/graph.js?v=20260731-routing-runtime'" in main
-    assert 'src="./js/main.js?v=20260802-signal-orange"' in index
+    assert 'src="./js/main.js?v=20260830-basemap-hotfix"' in index
+
+
+def test_default_basemap_does_not_require_an_api_key():
+    config = Path("js/config.js").read_text()
+    main = Path("js/main.js").read_text()
+    map_runtime = Path("js/map.js").read_text()
+
+    assert "https://tile.openstreetmap.org/{z}/{x}/{y}.png" in config
+    assert "basemaps.cartocdn.com" not in config
+    assert "OpenStreetMap contributors" in config
+    assert "./config.js?v=20260830-basemap-hotfix" in main
+    assert "./map.js?v=20260830-basemap-hotfix" in main
+    assert "./config.js?v=20260830-basemap-hotfix" in map_runtime
 
 
 def test_location_search_is_submit_only_bounded_and_rate_limited():

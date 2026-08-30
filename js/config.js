@@ -58,16 +58,15 @@ export const LAYERS = [
   { src: 'network',     lts: 1, casing: true  },
 ];
 
-/** Keyless raster basemaps, verified to return 200 without an API key.
- *  Every mainstream *vector* basemap now requires a key, so these are raster. */
+/** Raster basemaps for normal interactive viewing. The default uses OSM's
+ * official tile endpoint and follows its attribution/caching requirements. */
 export const BASEMAPS = {
   light: {
     label: 'Light',
-    tiles: ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{ratio}.png',
-            'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{ratio}.png',
-            'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{ratio}.png'],
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-    maxzoom: 20,
+    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" '
+      + 'target="_blank" rel="noopener">OpenStreetMap contributors</a>',
+    maxzoom: 19,
   },
   gray: {
     label: 'Gray',

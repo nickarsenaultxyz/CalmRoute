@@ -2,7 +2,7 @@
 
 import {
   BASEMAPS, DEFAULT_BASEMAP,
-} from './config.js?v=20260802-signal-orange';
+} from './config.js?v=20260830-basemap-hotfix';
 
 const RATIO = window.devicePixelRatio > 1.5 ? '@2x' : '';
 
@@ -111,7 +111,7 @@ export function createMap(manifest, initial = {}) {
 }
 
 /**
- * CARTO is free-with-attribution and has no SLA. Swap to the Esri gray canvas
+ * OSM's community tile service has no SLA. Swap to the Esri gray canvas
  * after repeated tile failures rather than leaving the user on a blank page.
  */
 function installTileFallback(map) {

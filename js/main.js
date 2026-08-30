@@ -2,7 +2,7 @@
 
 import {
   FAC_CONNECTOR, LTS, LTS_ORDER_LEGEND,
-} from './config.js?v=20260802-signal-orange';
+} from './config.js?v=20260830-basemap-hotfix';
 import {
   deferResidential, loadContext, loadCouncil, loadGraph, loadManifest,
   loadMethodology, loadNetwork, loadStats,
@@ -18,7 +18,7 @@ import { announce, easeTo, isCoarsePointer } from './lib/a11y.js';
 import {
   debounce, onPopState, read, write,
 } from './lib/urlstate.js?v=20260731-all-streets';
-import { checkSupport, createMap, setBasemap } from './map.js?v=20260802-signal-orange';
+import { checkSupport, createMap, setBasemap } from './map.js?v=20260830-basemap-hotfix';
 import { Panel } from './panel.js?v=20260731-calmroute-layout';
 import * as browse from './views/browse.js?v=20260802-signal-orange';
 import * as detail from './views/detail.js?v=20260802-signal-orange';
