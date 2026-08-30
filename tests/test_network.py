@@ -9,7 +9,7 @@ from __future__ import annotations
 import geopandas as gpd
 import pandas as pd
 import pytest
-from shapely.geometry import LineString, MultiLineString
+from shapely.geometry import LineString, MultiLineString, Point
 
 from lexbike import network as net
 from lexbike import params as params_mod
@@ -33,6 +33,28 @@ def at(dx: float, dy: float = 0.0) -> tuple[float, float]:
 def frame(rows, crs="EPSG:4326"):
     """Build a minimal network frame in WGS84."""
     return gpd.GeoDataFrame(rows, geometry="geometry", crs=crs)
+
+
+def empty_connectors(crs="EPSG:4326"):
+    return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs=crs)
+
+
+def with_reviewed_links(params, specs):
+    tree = params.tree
+    tree["network"]["reviewed_street_links"] = specs
+    return params_mod.Params(tree)
+
+
+def with_reviewed_closures(params, specs):
+    tree = params.tree
+    tree["network"]["reviewed_street_closures"] = specs
+    return params_mod.Params(tree)
+
+
+def with_exact_junctions(params, specs):
+    tree = params.tree
+    tree["network"]["reviewed_exact_junctions"] = specs
+    return params_mod.Params(tree)
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +131,7 @@ def test_shared_endpoints_become_one_node(params):
 
 
 def test_closed_loop_is_skipped(params):
+    """An unnormalized loop remains defensively excluded by build_graph."""
     edges = frame([
         {"id": 1, "lts": 2,
          "geometry": LineString([at(0), at(0.001), at(0.001, 0.001), at(0)])},
@@ -116,6 +139,356 @@ def test_closed_loop_is_skipped(params):
     graph, _, pairs = net.build_graph(edges, params)
     assert pairs[0] is None
     assert graph.number_of_edges() == 0
+
+
+def test_closed_street_is_split_into_a_three_edge_cycle(params):
+    ring = LineString([
+        at(0), at(0.001), at(0.001, 0.001), at(0, 0.001), at(0),
+    ])
+    streets = frame([{"id": 1, "lts": 2, "geometry": ring}])
+
+    normalized = net.split_for_connectors(streets, empty_connectors(), params)
+    graph, _, pairs = net.build_graph(normalized, params)
+
+    assert len(normalized) == 3
+    assert set(normalized["id"]) == {
+        1, net.RING_SPLIT_ID_BASE, net.RING_SPLIT_ID_BASE + 1,
+    }
+    assert sum(geom.length for geom in normalized.geometry) == pytest.approx(
+        ring.length
+    )
+    assert all(pair is not None for pair in pairs)
+    assert graph.number_of_nodes() == 3
+    assert graph.number_of_edges() == 3
+
+
+def test_exact_endpoint_to_interior_vertex_is_split(params):
+    streets = frame([
+        {
+            "id": 1,
+            "lts": 2,
+            "geometry": LineString([at(0), at(0.001), at(0.002)]),
+        },
+        {
+            "id": 2,
+            "lts": 2,
+            "geometry": LineString([at(0.001, -0.001), at(0.001)]),
+        },
+    ])
+
+    configured = with_exact_junctions(params, [{
+        "name": "Synthetic exact junction",
+        "target_street_id": 1,
+        "target_street_name": "THROUGH ST",
+        "endpoint_street_id": 2,
+        "endpoint_street_name": "STUB ST",
+        "point": list(at(0.001)),
+        "why": "Synthetic test fixture",
+    }])
+    streets["road_name"] = ["THROUGH ST", "STUB ST"]
+
+    normalized = net.split_for_connectors(
+        streets, empty_connectors(), configured
+    )
+    graph, _, pairs = net.build_graph(normalized, configured)
+
+    assert len(normalized) == 3
+    assert net.JUNCTION_SPLIT_ID_BASE in set(normalized["id"])
+    stub_pair = pairs[normalized.index[normalized["id"] == 2][0]]
+    long_pairs = [
+        pairs[i] for i in normalized.index[normalized["id"] != 2]
+    ]
+    shared = set(stub_pair) & set(long_pairs[0]) & set(long_pairs[1])
+    assert len(shared) == 1
+    assert graph.number_of_edges() == 3
+
+
+def test_unreviewed_exact_interior_junction_fails_closed(params):
+    streets = frame([
+        {
+            "id": 1,
+            "road_name": "THROUGH ST",
+            "lts": 2,
+            "geometry": LineString([at(0), at(0.001), at(0.002)]),
+        },
+        {
+            "id": 2,
+            "road_name": "STUB ST",
+            "lts": 2,
+            "geometry": LineString([at(0.001, -0.001), at(0.001)]),
+        },
+    ])
+    configured = with_exact_junctions(params, [])
+
+    with pytest.raises(net.NetworkError, match="need bridge/layer review"):
+        net.split_for_connectors(streets, empty_connectors(), configured)
+
+
+def test_tiny_ring_cannot_bypass_collapsed_node_invariant(params):
+    tiny = LineString([
+        at(0), at(0.000004), at(0.000004, 0.000004), at(0),
+    ])
+    streets = frame([{"id": 1, "lts": 2, "geometry": tiny}])
+
+    with pytest.raises(net.NetworkError, match="collapses entirely"):
+        net.split_for_connectors(streets, empty_connectors(), params)
+
+
+def test_unsplit_subprecision_line_cannot_bypass_invariant(params):
+    streets = frame([{
+        "id": 1,
+        "lts": 2,
+        "geometry": LineString([at(0), at(0.000004)]),
+    }])
+
+    with pytest.raises(net.NetworkError, match="still collapse"):
+        net.split_for_connectors(streets, empty_connectors(), params)
+
+
+def test_collapsed_near_end_cut_keeps_parent_id_and_geometry(params):
+    """A near-end cut must not make the stable source SCLINK disappear."""
+    junction = at(0.000004)
+    streets = frame([
+        {
+            "id": 1,
+            "lts": 2,
+            "geometry": LineString([at(0), junction, at(0.001)]),
+        },
+        {
+            "id": 2,
+            "lts": 2,
+            "geometry": LineString([at(0, -0.001), junction]),
+        },
+    ])
+
+    normalized = net.split_for_connectors(streets, empty_connectors(), params)
+    _, _, pairs = net.build_graph(normalized, params)
+
+    assert set(normalized["id"]) == {1, 2}
+    assert all(pair is not None for pair in pairs)
+    assert sum(geom.length for geom in normalized.geometry) == pytest.approx(
+        sum(geom.length for geom in streets.geometry)
+    )
+
+
+def test_connector_cuts_in_one_published_node_merge_without_geometry_loss(params):
+    street = LineString([at(0), at(0.002)])
+    streets = frame([{"id": 1, "lts": 2, "geometry": street}])
+    requested = gpd.GeoSeries(
+        [Point(at(0.001)), Point(at(0.001004))], crs=4326
+    ).to_crs(params["meta.crs_working"])
+    connectors = frame([
+        {
+            "split_street_id": 1,
+            "split_x": point.x,
+            "split_y": point.y,
+            "geometry": LineString([at(0), at(0.0001)]),
+        }
+        for point in requested
+    ])
+
+    normalized = net.split_for_connectors(streets, connectors, params)
+    graph, _, pairs = net.build_graph(normalized, params)
+
+    assert len(normalized) == 2
+    assert set(normalized["id"]) == {1, net.SPLIT_ID_BASE}
+    assert sum(geom.length for geom in normalized.geometry) == pytest.approx(
+        street.length
+    )
+    assert all(pair is not None for pair in pairs)
+    assert graph.number_of_edges() == 2
+
+
+# ---------------------------------------------------------------------------
+#  Individually reviewed street closures and links
+# ---------------------------------------------------------------------------
+
+def reviewed_closure_spec(**overrides):
+    spec = {
+        "name": "Test street closure",
+        "id": 10,
+        "street_name": "FIRST ST",
+        "min_length_m": 80.0,
+        "max_length_m": 100.0,
+        "why": "Synthetic test fixture",
+    }
+    spec.update(overrides)
+    return spec
+
+
+def test_reviewed_street_closure_survives_topology_splitting(params):
+    streets = frame([{
+        "id": 10,
+        "road_name": "FIRST ST",
+        "lts": 1,
+        "geometry": LineString([at(0), at(0.001)]),
+    }])
+    configured = with_reviewed_closures(
+        params, [reviewed_closure_spec()]
+    )
+
+    closed = net.apply_reviewed_street_closures(streets, configured)
+    metric_midpoint = gpd.GeoSeries(
+        [Point(at(0.0005))], crs=4326
+    ).to_crs(params["meta.crs_working"]).iloc[0]
+    connectors = frame([{
+        "split_street_id": 10,
+        "split_x": metric_midpoint.x,
+        "split_y": metric_midpoint.y,
+        "geometry": LineString([at(0), at(0.0001)]),
+    }])
+    pieces = net.split_for_connectors(closed, connectors, configured)
+
+    assert len(pieces) == 2
+    assert not pieces["road_bike_ok"].any()
+    assert pieces["access_reviewed"].all()
+
+
+def test_partial_street_closure_keeps_public_remainder_routable(params):
+    source = LineString([at(0), at(0.001)])
+    streets = frame([{
+        "id": 10,
+        "road_name": "FIRST ST",
+        "lts": 1,
+        "geometry": source,
+    }])
+    spec = reviewed_closure_spec(
+        boundary=list(at(0.0004)),
+        closed_from="start",
+        closed_endpoint=list(at(0)),
+        max_boundary_m=0.5,
+        max_endpoint_m=0.5,
+        min_closed_length_m=30.0,
+        max_closed_length_m=40.0,
+        public_piece_id=725_009_001,
+    )
+    configured = with_reviewed_closures(params, [spec])
+
+    split = net.apply_reviewed_street_closures(streets, configured)
+
+    assert set(split["id"]) == {10, 725_009_001}
+    closed = split.loc[split["id"] == 10].iloc[0]
+    public = split.loc[split["id"] == 725_009_001].iloc[0]
+    assert not bool(closed["road_bike_ok"])
+    assert bool(closed["access_reviewed"])
+    assert bool(public["road_bike_ok"])
+    assert not bool(public["access_reviewed"])
+    assert closed.geometry.coords[-1] == public.geometry.coords[0]
+    assert sum(piece.length for piece in split.geometry) == pytest.approx(
+        source.length
+    )
+
+
+@pytest.mark.parametrize(
+    "override, message",
+    [
+        ({"id": 999}, "street id 999 is unavailable"),
+        ({"street_name": "WRONG ST"}, "expected 'WRONG ST'"),
+        ({"max_length_m": 85.0}, "expected 80.0-85.0 m"),
+        ({
+            "boundary": list(at(0.01)),
+            "closed_from": "start",
+            "closed_endpoint": list(at(0)),
+            "max_boundary_m": 0.5,
+            "max_endpoint_m": 0.5,
+            "min_closed_length_m": 30.0,
+            "max_closed_length_m": 40.0,
+            "public_piece_id": 725_009_001,
+        }, "boundary is"),
+    ],
+)
+def test_reviewed_street_closure_quality_gates(params, override, message):
+    streets = frame([{
+        "id": 10,
+        "road_name": "FIRST ST",
+        "lts": 1,
+        "geometry": LineString([at(0), at(0.001)]),
+    }])
+    configured = with_reviewed_closures(
+        params, [reviewed_closure_spec(**override)]
+    )
+
+    with pytest.raises(net.NetworkError, match=message):
+        net.apply_reviewed_street_closures(streets, configured)
+
+
+def reviewed_link_spec(**overrides):
+    spec = {
+        "id": 730_009_001,
+        "name": "Test reviewed gap",
+        "road_name": "FIRST ST / SECOND ST",
+        "street_ids": [10, 20],
+        "street_names": ["FIRST ST", "SECOND ST"],
+        "geometry": [at(0.001), at(0.0011, 0.00003), at(0.0012)],
+        "max_endpoint_m": 3.0,
+        "max_length_m": 30.0,
+        "lts": 2,
+        "why": "Synthetic test fixture",
+    }
+    spec.update(overrides)
+    return spec
+
+
+def reviewed_link_streets():
+    return frame([
+        {
+            "id": 10, "road_name": "FIRST ST", "lts": 1, "fac": "none",
+            "geometry": LineString([at(0), at(0.001)]),
+        },
+        {
+            "id": 20, "road_name": "SECOND ST", "lts": 2, "fac": "none",
+            "geometry": LineString([at(0.0012), at(0.0022)]),
+        },
+        {
+            "id": 30, "road_name": "UNLISTED ST", "lts": 1, "fac": "none",
+            "geometry": LineString([at(0.0011, 0.0001), at(0.0011, 0.0002)]),
+        },
+    ])
+
+
+def test_reviewed_street_link_joins_only_the_pinned_endpoints(params):
+    streets = reviewed_link_streets()
+    configured = with_reviewed_links(params, [reviewed_link_spec()])
+
+    linked = net.add_reviewed_street_links(streets, configured)
+    graph, _, pairs = net.build_graph(linked, configured)
+
+    bridge_index = linked.index[linked["id"] == 730_009_001][0]
+    bridge = linked.loc[bridge_index]
+    assert bridge.geometry.coords[0] == streets.geometry.iloc[0].coords[-1]
+    assert bridge.geometry.coords[-1] == streets.geometry.iloc[1].coords[0]
+    assert bridge["source"] == "osm"
+    assert bridge["osm_role"] == "reviewed_street_link"
+    assert bool(bridge["connector_reviewed"]) is True
+    assert bridge["fac"] == "none"
+    assert bridge["lts"] == 2
+    assert bool(bridge["road_bike_ok"]) is True
+
+    first_pair, second_pair, third_pair = pairs[:3]
+    bridge_pair = pairs[bridge_index]
+    assert first_pair[1] == bridge_pair[0]
+    assert second_pair[0] == bridge_pair[1]
+    assert not (set(third_pair) & set(bridge_pair)), \
+        "a nearby unlisted endpoint must remain disconnected"
+    assert graph.number_of_nodes() == 6
+    assert graph.number_of_edges() == 4
+
+
+@pytest.mark.parametrize(
+    "override, message",
+    [
+        ({"street_ids": [10, 999]}, "street id 999 is unavailable"),
+        ({"street_names": ["WRONG ST", "SECOND ST"]}, "expected 'WRONG ST'"),
+        ({"geometry": [at(0.01), at(0.011)]}, "configured end is"),
+        ({"max_length_m": 5.0}, "geometry is"),
+    ],
+)
+def test_reviewed_street_link_quality_gates(params, override, message):
+    configured = with_reviewed_links(
+        params, [reviewed_link_spec(**override)]
+    )
+    with pytest.raises(net.NetworkError, match=message):
+        net.add_reviewed_street_links(reviewed_link_streets(), configured)
 
 
 # ---------------------------------------------------------------------------

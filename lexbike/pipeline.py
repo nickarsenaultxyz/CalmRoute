@@ -69,6 +69,9 @@ def classify(streets, params: Params):
         )
     ]
     gdf["lts"] = gdf["lts"].astype("int8")
+    if "road_bike_ok" in gdf.columns:
+        closed = ~gdf["road_bike_ok"].fillna(True).astype(bool)
+        gdf.loc[closed, "lts"] = lts_mod.PROHIBITED
     return gdf
 
 
@@ -119,6 +122,9 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
     )
 
     streets = io.attach_aadt(streets, aadt_by_station, params)
+    # Apply access closures before any topology split so every child geometry
+    # inherits the restriction if a future path connector lands on it.
+    streets = network.apply_reviewed_street_closures(streets, params)
 
     log.info("--- stage 2/5: conflate facilities onto centrelines ---")
     # Ratings must reflect what is built, so planned/funded projects are excluded
@@ -153,6 +159,10 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
 
     log.info("--- stage 3/5: classify ---")
     rated = classify(streets, params)
+    # A handful of missing centreline arms have been individually confirmed
+    # against current street geometry. Add them only after classification so
+    # their reviewed LTS cannot be overwritten by an inferred traffic value.
+    rated = network.add_reviewed_street_links(rated, params)
 
     log.info("--- stage 4/5: graph, islands, barriers ---")
     edges = assemble_edges(rated, paths, connectors, params)
@@ -160,6 +170,13 @@ def run_build(params: Params, out_dir: Path, *, skip_size_check: bool = False) -
     summarize(edges, params)
 
     graph, node_ids, pairs = network.build_graph(edges, params)
+    unroutable = [i for i, pair in enumerate(pairs) if pair is None]
+    if unroutable:
+        ids = edges.iloc[unroutable]["id"].astype(int).tolist()[:5]
+        raise network.NetworkError(
+            f"{len(unroutable)} published features have no graph endpoints "
+            f"(e.g. ids {ids})"
+        )
     edges, islands = network.label_islands(edges, pairs, params)
     barriers = network.rank_barriers(edges, pairs, islands, params)
 
@@ -571,7 +588,8 @@ def assemble_edges(streets, paths, connectors, params: Params):
     keep = [
         "id", "geometry", "kind", "fac", "lts", "rdclass", "lanes",
         "speed_mph", "aadt", "aadt_src", "road_name", "source", "osm_role",
-        "connector_reviewed", "connector_name",
+        "connector_reviewed", "connector_name", "road_bike_ok",
+        "uncertainty_factor", "access_reviewed",
     ]
     out = pd.concat(
         [f.reindex(columns=[c for c in keep if c in f.columns or c == "geometry"])

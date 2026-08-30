@@ -115,7 +115,7 @@ def test_router_uses_one_cache_key_for_its_graph_runtime():
 
     assert "import('./lib/graph.js')" not in main
     assert "from './lib/graph.js?v=20260731-routing-runtime'" in main
-    assert 'src="./js/main.js?v=20260830-basemap-hotfix"' in index
+    assert 'src="./js/main.js?v=20260830-topology"' in index
 
 
 def test_default_basemap_does_not_require_an_api_key():
@@ -363,6 +363,28 @@ def test_properties_the_ui_reads_are_present(features):
         assert key in present, f"the UI reads properties.{key}"
 
 
+def test_reviewed_street_link_provenance_has_a_public_label():
+    detail = Path("js/views/detail.js").read_text()
+    assert "reviewed_street_link" in detail
+    assert "Reviewed-street data" in detail
+    assert "Reviewed closure; excluded from routes" in detail
+
+
+def test_reviewed_closure_is_exported_without_hiding_public_simpson(features):
+    by_id = {feature["id"]: feature["properties"] for feature in features}
+    closed_ids = {8284, 9283, 730000003}
+    assert {
+        feature["id"] for feature in features
+        if feature["properties"].get("ar") == 1
+    } == closed_ids
+    for closed_id in closed_ids:
+        assert by_id[closed_id]["lts"] == 0
+        assert by_id[closed_id]["ar"] == 1
+        assert by_id[closed_id]["cf"] == 2
+    assert by_id[725000001]["lts"] == 2
+    assert "ar" not in by_id[725000001]
+
+
 def test_enabled_osm_build_preserves_provenance_and_access_policy(manifest, features):
     stats = load(manifest["files"]["stats"])
     if not stats.get("osm_paths", {}).get("enabled"):
@@ -381,6 +403,10 @@ def test_enabled_osm_build_preserves_provenance_and_access_policy(manifest, feat
         f for f in osm
         if f["properties"].get("osm_role") == "reviewed_street"
     ]
+    reviewed_links = [
+        f for f in osm
+        if f["properties"].get("osm_role") == "reviewed_street_link"
+    ]
     campus = [
         f for f in osm
         if f["properties"].get("osm_role") == "campus_path"
@@ -389,6 +415,7 @@ def test_enabled_osm_build_preserves_provenance_and_access_policy(manifest, feat
     assert campus, "UK campus walkways must reach the published routing graph"
     assert access, "explicitly bicycle-authorized access roads must reach the graph"
     assert reviewed, "reviewed missing streets must reach the graph"
+    assert reviewed_links, "reviewed short street links must reach the graph"
     access_rating = stats["osm_paths"]["access_roads"]["rating"]
     assert access_rating == 2
     assert all(f["properties"]["lts"] == access_rating for f in access)
@@ -408,6 +435,14 @@ def test_enabled_osm_build_preserves_provenance_and_access_policy(manifest, feat
     assert {"Commonwealth Drive", "University Court"} <= reviewed_names
     assert stats["osm_paths"]["reviewed_streets"]["segments"] == len(reviewed)
     assert stats["osm_paths"]["reviewed_streets"]["miles"] > 0
+    link_stats = stats["osm_paths"]["reviewed_street_links"]
+    assert {f["id"] for f in reviewed_links} == set(link_stats["required_ids"])
+    assert link_stats["segments"] == len(reviewed_links) == 4
+    assert link_stats["ratings"] == [0, 1, 3]
+    assert link_stats["miles"] > 0
+    assert all(f["properties"]["fac"] == 0 for f in reviewed_links)
+    assert all(f["properties"]["kind"] == 0 for f in reviewed_links)
+    assert all(f["properties"].get("rv") == 1 for f in reviewed_links)
     campus_stats = stats["osm_paths"]["campus_walkways"]
     assert campus_stats["campus_relation_id"] == 4815526
     assert campus_stats["scope"] == "academic core"
@@ -622,7 +657,7 @@ def test_every_lfucg_street_rating_replays_from_its_exported_inputs(features):
         props = feature["properties"]
         if props.get("kind") != 0 or props.get("src") == "osm":
             continue
-        expected = lts.lts_for_segment(
+        expected = 0 if props.get("ar") else lts.lts_for_segment(
             facility_by_code[props["fac"]],
             props["rc"],
             props["ln"],

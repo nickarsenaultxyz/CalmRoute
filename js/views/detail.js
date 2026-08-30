@@ -55,6 +55,13 @@ export function render(props, { stats, aadtYear, council } = {}) {
       </div>
 
       <dl class="kv">
+        ${props.ar
+          ? fact(
+            'Access status',
+            'Reviewed closure; excluded from routes',
+            '—',
+          )
+          : ''}
         ${fact('Posted speed', speed(props.sp), 'Not on record')}
         ${fact('Traffic', traffic(props.ad, {
           year: aadtYear,
@@ -73,7 +80,7 @@ export function render(props, { stats, aadtYear, council } = {}) {
         ${fact('Length', miles(props.mi), '—')}
         ${props.src === 'osm'
           ? fact(
-            props.osm_role === 'reviewed_street'
+            ['reviewed_street', 'reviewed_street_link'].includes(props.osm_role)
               ? 'Reviewed-street data'
               : props.osm_role === 'campus_path'
                 ? 'UK academic-core walkway data'

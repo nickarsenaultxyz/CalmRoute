@@ -8,7 +8,7 @@ Lexington's street network — not just the streets that already have bike
 infrastructure — and analyses how well the low-stress parts connect to each
 other.
 
-Live map: <https://nickarsenaultxyz.github.io/Lex-Bike-Data/>
+Live map: <https://nickarsenaultxyz.github.io/CalmRoute/>
 
 ---
 

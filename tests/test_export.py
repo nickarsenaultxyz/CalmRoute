@@ -54,6 +54,21 @@ def test_known_properties_are_emitted_with_short_keys(params):
     assert p["mi"] == pytest.approx(0.34)
 
 
+def test_reviewed_access_flag_is_sparse(params):
+    closed = export._feature(
+        pd.Series(row(lts=0, access_reviewed=True)), 5
+    )["properties"]
+    ordinary = export._feature(
+        pd.Series(row(access_reviewed=False)), 5
+    )["properties"]
+    missing = export._feature(
+        pd.Series(row(access_reviewed=float("nan"))), 5
+    )["properties"]
+    assert closed["ar"] == 1
+    assert "ar" not in ordinary
+    assert "ar" not in missing
+
+
 def test_modelled_aadt_is_marked_for_the_detail_panel(params):
     from lexbike import io
 

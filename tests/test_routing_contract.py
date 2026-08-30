@@ -91,6 +91,51 @@ def test_edge_ids_resolve_to_drawable_features(graph):
     assert not missing, f"{len(missing)} routable edges have no drawable geometry"
 
 
+def test_every_published_network_feature_is_routable(graph, features_by_id):
+    """A line that is drawn but absent from graph.json makes a false promise."""
+    routed = {edge[2] for edge in graph["edges"]}
+    missing = set(features_by_id) - routed
+    assert not missing, f"{len(missing)} drawn features have no routing edge"
+
+
+def test_reviewed_short_street_links_join_the_pinned_source_arms(graph):
+    incident = {}
+    by_id = {}
+    for edge in graph["edges"]:
+        u, v, edge_id = edge[:3]
+        by_id[edge_id] = edge
+        incident.setdefault(u, set()).add(edge_id)
+        incident.setdefault(v, set()).add(edge_id)
+
+    expected = {
+        730000001: (14350, 8328),
+        730000002: (15470, 13491),
+        730000003: (8284, 9283),
+        730000004: (5687, 60),
+    }
+    for link_id, (first_id, second_id) in expected.items():
+        u, v = by_id[link_id][:2]
+        assert first_id in incident[u]
+        assert second_id in incident[v]
+
+    # O-063-2014 closed and quitclaimed the Prospect/Simpson right-of-way.
+    # Preserve the physical segment for explanation but never route over it.
+    assert by_id[730000003][4] == 0
+    assert by_id[8284][4] == 0
+    assert by_id[9283][4] == 0
+    assert by_id[725000001][4] == 2
+
+
+def test_all_source_street_rings_keep_a_routable_parent_edge(graph):
+    """Twenty closed LFUCG streets previously vanished from the router."""
+    source_ring_ids = {
+        850, 1794, 2525, 2539, 2699, 2797, 3729, 3777, 5232, 5477,
+        5734, 6434, 7686, 8220, 8769, 9190, 9483, 12139, 14910, 15270,
+    }
+    routed = {edge[2] for edge in graph["edges"]}
+    assert source_ring_ids <= routed
+
+
 def test_every_drawn_edge_lands_exactly_on_its_graph_nodes(graph, features_by_id):
     """Every transition in a browser route must be spatially continuous.
 

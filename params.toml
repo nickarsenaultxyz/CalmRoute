@@ -458,6 +458,138 @@ max_m = 90.0
 min_cluster_segments = 3
 barrier_min_island_segments = 3
 
+# LFUCG Ordinance O-063-2014 closed all of Prospect Avenue and the adjoining
+# surveyed portion of Simpson Avenue here, quitclaiming the former rights-of-way
+# to the abutting owners and reserving only utility easements. Pin every
+# municipal centreline covered by that action so visible pavement cannot be
+# mistaken for public bicycle access. The unmapped piece between these two
+# records is retained separately below as reviewed link 730000003, also LTS 0.
+[[network.reviewed_street_closures]]
+name = "O-063-2014 Prospect Avenue closure"
+id = 8284
+street_name = "PROSPECT AVE"
+min_length_m = 90.0
+max_length_m = 105.0
+ordinance = "O-063-2014"
+source_url = "https://lexington.legistar.com/LegislationDetail.aspx?GUID=200E233E-7A48-48FE-BE93-BAC2EC03A13B&ID=1747719"
+ordinance_url = "https://legistar1.granicus.com/Lexington/attachments/a4f994fa-950b-434d-a0bb-dca3c5cbcf4d.pdf"
+survey_url = "https://legistar1.granicus.com/Lexington/attachments/4298909a-74f5-4505-938f-de814a6c3dda.pdf"
+why = "The ordinance survey closed all 350.77 ft of Prospect Avenue and transferred the former right-of-way without reserving public access."
+
+[[network.reviewed_street_closures]]
+name = "O-063-2014 Simpson Avenue closure"
+id = 9283
+street_name = "SIMPSON AVE"
+min_length_m = 55.0
+max_length_m = 75.0
+boundary = [-84.51508628966018, 38.03403642821725]
+closed_from = "start"
+closed_endpoint = [-84.514932863165, 38.033900630061]
+max_boundary_m = 0.5
+max_endpoint_m = 0.5
+min_closed_length_m = 18.0
+max_closed_length_m = 22.0
+public_piece_id = 725000001
+ordinance = "O-063-2014"
+source_url = "https://lexington.legistar.com/LegislationDetail.aspx?GUID=200E233E-7A48-48FE-BE93-BAC2EC03A13B&ID=1747719"
+ordinance_url = "https://legistar1.granicus.com/Lexington/attachments/a4f994fa-950b-434d-a0bb-dca3c5cbcf4d.pdf"
+survey_url = "https://legistar1.granicus.com/Lexington/attachments/4298909a-74f5-4505-938f-de814a6c3dda.pdf"
+parcel_url = "https://services1.arcgis.com/Mg7DLdfYcSWIaDnu/arcgis/rest/services/Parcel/FeatureServer/0/query?where=PVANUM%3D%2738256100%27&outFields=PVANUM%2CADDRESS&returnGeometry=true&outSR=4326&f=geojson"
+why = "The current parcel boundary covers only the first 20.2 m of this source arm. Split at that reviewed boundary so the remaining 43.5 m of public Simpson Avenue stays routable."
+
+# The source has one genuine endpoint-to-interior street junction at published
+# precision. Pin both records because LFUCG has no bridge/layer field: a newly
+# appearing exact match must be reviewed before it can become a graph turn.
+[[network.reviewed_exact_junctions]]
+name = "Cheapside at West Main Street"
+target_street_id = 6199
+target_street_name = "W MAIN ST"
+endpoint_street_id = 2023
+endpoint_street_name = "CHEAPSIDE"
+point = [-84.49861, 38.04780]
+why = "OSM West Main (219263293) and Cheapside (16169540) share at-grade node 163425488 with no bridge, tunnel, or layer tags."
+
+# Short missing street links are never inferred from distance alone. Each entry
+# below was checked against the current LFUCG endpoints and current OSM street
+# topology. The geometry follows only the missing portion, while strict source
+# id, name, endpoint and length gates make upstream changes fail visibly.
+# These are ordinary street links (fac=none), not bike facilities.
+[[network.reviewed_street_links]]
+id = 730000001
+name = "Rabbits Foot Trail centreline gap"
+road_name = "RABBITS FOOT TRL"
+street_ids = [14350, 8328]
+street_names = ["RABBITS FOOT TRL", "RABBITS FOOT TRL"]
+geometry = [
+  [-84.564926414535, 38.005019783506],
+  [-84.564923900000, 38.005004300000],
+  [-84.564846383217, 38.005076483905],
+]
+max_endpoint_m = 3.0
+max_length_m = 18.0
+lts = 1
+why = "Both LFUCG arms are one OSM 25 mph residential way (405585024) with shared topology and no access restriction."
+
+[[network.reviewed_street_links]]
+id = 730000002
+name = "Sullivans Trace centreline gap"
+road_name = "SULLIVANS TRCE"
+street_ids = [15470, 13491]
+street_names = ["SULLIVANS TRCE", "SULLIVANS TRCE"]
+geometry = [
+  [-84.523477776693, 38.106682972556],
+  [-84.523470570967, 38.106680679135],
+  [-84.523376300000, 38.106865600000],
+  [-84.523311372328, 38.106989324749],
+  [-84.523314810711, 38.106990451272],
+]
+max_endpoint_m = 3.0
+max_length_m = 45.0
+lts = 3
+why = "Both LFUCG arms are one OSM 25 mph residential way (144487318) with shared topology and no access restriction."
+
+[[network.reviewed_street_links]]
+id = 730000003
+name = "Prospect Avenue at Simpson Avenue"
+road_name = "PROSPECT AVE / SIMPSON AVE"
+street_ids = [8284, 9283]
+street_names = ["PROSPECT AVE", "SIMPSON AVE"]
+geometry = [
+  [-84.514925557089, 38.033605842047],
+  [-84.514918928041, 38.033599884214],
+  [-84.514834000000, 38.033659000000],
+  [-84.514806000000, 38.033695000000],
+  [-84.514796000000, 38.033728000000],
+  [-84.514794000000, 38.033746000000],
+  [-84.514799000000, 38.033766000000],
+  [-84.514816000000, 38.033791000000],
+  [-84.514936457318, 38.033898101212],
+  [-84.514932863165, 38.033900630061],
+]
+max_endpoint_m = 3.0
+max_length_m = 50.0
+lts = 0
+road_bike_ok = false
+why = "OSM residential ways 16170037 and 16165912 and 2025 aerial imagery confirm physical continuity, but LFUCG ordinance O-063-2014 closed and quitclaimed the former right-of-way to abutting owners while reserving only utility easements. Show the closure as LTS 0 and keep it out of routes unless public bicycle access is documented."
+
+[[network.reviewed_street_links]]
+id = 730000004
+name = "Larado Drive at Second Street"
+road_name = "LARADO DR / UNNAMED ST"
+street_ids = [5687, 60]
+street_names = ["LARADO DR", "UNNAMED ST"]
+geometry = [
+  [-84.540781755720, 38.158421335709],
+  [-84.540783241870, 38.158418769632],
+  [-84.540822100000, 38.158432800000],
+  [-84.540840437415, 38.158403009952],
+  [-84.540836302699, 38.158401423208],
+]
+max_endpoint_m = 3.0
+max_length_m = 14.0
+lts = 3
+why = "OSM Larado Drive (16166114) and Second Street (16162692) share the junction; the clipped link avoids overlapping county-boundary duplicates."
+
 
 # ---------------------------------------------------------------------------
 #  Supplementary paths from OpenStreetMap

@@ -87,8 +87,12 @@ jobs:
         # unexplained jump should be reviewed before replacing the public map.
         run: make validate PY=python
 
-      - name: Verify the frontend contract against the built data
-        run: python -m pytest tests/test_frontend_contract.py -q
+      - name: Verify the frontend and routing contracts against the built data
+        run: >-
+          python -m pytest
+          tests/test_frontend_contract.py
+          tests/test_routing_contract.py
+          -q
 
       - name: Assemble the site
         # Copy only what the page fetches. Source GeoJSON, the Python package

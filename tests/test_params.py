@@ -101,6 +101,58 @@ def test_reviewed_connectors_are_narrowly_scoped():
     assert max(c["max_m"] for c in connectors) <= 90
 
 
+def test_reviewed_street_closures_are_narrowly_scoped():
+    p = params_mod.load()
+    closures = p["network.reviewed_street_closures"]
+
+    assert len(closures) == 2
+    assert {row["id"] for row in closures} == {8284, 9283}
+    assert {row["street_name"] for row in closures} == {
+        "PROSPECT AVE", "SIMPSON AVE",
+    }
+    assert all(row["ordinance"] == "O-063-2014" for row in closures)
+    assert all(row["source_url"].startswith("https://") for row in closures)
+    assert all(row.get("why") for row in closures)
+    simpson = next(row for row in closures if row["id"] == 9283)
+    assert simpson["closed_from"] == "start"
+    assert simpson["public_piece_id"] == 725000001
+    assert 725_000_000 <= simpson["public_piece_id"] < 730_000_000
+    assert simpson["max_boundary_m"] <= 0.5
+
+
+def test_reviewed_street_links_are_narrowly_scoped():
+    p = params_mod.load()
+    links = p["network.reviewed_street_links"]
+
+    assert len(links) == 4
+    assert {tuple(link["street_ids"]) for link in links} == {
+        (14350, 8328),
+        (15470, 13491),
+        (8284, 9283),
+        (5687, 60),
+    }
+    assert len({link["id"] for link in links}) == len(links)
+    assert all(730_000_000 <= link["id"] < 740_000_000 for link in links)
+    assert all(len(link["geometry"]) >= 2 for link in links)
+    assert all(link["max_endpoint_m"] <= 3 for link in links)
+    assert all(link["max_length_m"] <= 50 for link in links)
+    assert all(link.get("why") for link in links)
+    prospect = next(link for link in links if link["id"] == 730000003)
+    assert prospect["lts"] == 0
+    assert prospect["road_bike_ok"] is False
+
+
+def test_reviewed_exact_junction_is_narrowly_scoped():
+    p = params_mod.load()
+    junctions = p["network.reviewed_exact_junctions"]
+
+    assert len(junctions) == 1
+    assert junctions[0]["target_street_id"] == 6199
+    assert junctions[0]["endpoint_street_id"] == 2023
+    assert junctions[0]["point"] == [-84.49861, 38.0478]
+    assert junctions[0].get("why")
+
+
 def test_reviewed_on_road_assignments_are_narrowly_scoped():
     p = params_mod.load()
     assignments = p["conflation.reviewed_on_road_assignments"]

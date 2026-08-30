@@ -102,6 +102,10 @@ def add_provenance(
         off_stream, BASIS_TYPE,
         np.where(src == io.AADT_STATION, BASIS_TYPE_SPEED_TRAFFIC, BASIS_TYPE_SPEED),
     )
+    reviewed_access = out.get(
+        "access_reviewed", pd.Series(False, index=out.index)
+    ).fillna(False).astype(bool).to_numpy()
+    basis = np.where(reviewed_access, BASIS_TYPE, basis)
     out["basis"] = basis.astype("int8")
 
     # A quiet local street rated from its posted speed is genuinely well
@@ -131,6 +135,10 @@ def add_provenance(
             "confidence: %d segments demoted to low because their LTS flips "
             "under a sensitivity variant", n_demoted,
         )
+
+    # A reviewed legal closure is not a traffic-model inference and must not be
+    # demoted by an LTS sensitivity variant.
+    conf = np.where(reviewed_access, CONF_HIGH, conf)
 
     out["cf"] = conf.astype("int8")
     return out
@@ -189,6 +197,13 @@ def _feature(row, decimals: int) -> dict:
             props["osm_role"] = str(role)
     if bool(row.get("campus_parallel_bike", False)):
         props["cb"] = 1
+    reviewed_access = row.get("access_reviewed")
+    if (
+        reviewed_access is not None
+        and not pd.isna(reviewed_access)
+        and bool(reviewed_access)
+    ):
+        props["ar"] = 1
 
     reviewed = row.get("connector_reviewed")
     if reviewed is not None and not pd.isna(reviewed) and bool(reviewed):
@@ -361,6 +376,7 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
     )
     osm_access = osm_source & osm_role.eq("access")
     osm_reviewed_street = osm_source & osm_role.eq("reviewed_street")
+    osm_reviewed_link = osm_source & osm_role.eq("reviewed_street_link")
 
     return {
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -443,6 +459,17 @@ def build_stats(edges, islands, barriers, params: Params, extra: dict) -> dict:
                 "required_names": params.get(
                     "osm.required_reviewed_street_names", []
                 ),
+            },
+            "reviewed_street_links": {
+                "segments": int(osm_reviewed_link.sum()),
+                "miles": round(float(miles[osm_reviewed_link].sum()), 2),
+                "ratings": sorted(
+                    {int(value) for value in edges.loc[osm_reviewed_link, "lts"]}
+                ),
+                "required_ids": [
+                    int(link["id"])
+                    for link in params.get("network.reviewed_street_links", [])
+                ],
             },
         },
         "coverage": {
