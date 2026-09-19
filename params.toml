@@ -45,6 +45,7 @@ coord_decimals = 5           # ~0.87 m at 38°N; see docs/sensitivity.md
 # An unrecognized value raises rather than silently degrading to "none",
 # so a future LFUCG data update fails loudly.
 "Shared Use Path"       = "path"
+"Park Trail"            = "path"      # LFUCG off-road park connectors
 "Buffered Bicycle Lane" = "buffered"
 "Bicycle Lane"          = "lane"
 "Shoulder"              = "shoulder"
