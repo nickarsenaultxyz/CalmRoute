@@ -70,3 +70,29 @@ def test_old_and_live_lfucg_on_road_names_are_normalized(tmp_path):
     assert result.loc[0, "network_name"] == "Beaumont Centre Cir"
     assert result.loc[1, "network_name"] == "Beaumont Centre Cir"
     assert set(result["fac"]) == {"buffered"}
+
+
+def test_live_lfucg_park_trail_is_an_existing_off_road_path(tmp_path):
+    """Town Branch's park connector introduced this type in September 2026."""
+    source = tmp_path / "bike.geojson"
+    gpd.GeoDataFrame(
+        [{
+            "objectid": 649,
+            "type_facility": "Park Trail",
+            "status": "Existing",
+            "type_road": "Off Road",
+            "alttype_facility": None,
+            "name_facility": "PARK CONNECTOR",
+            "name_network": "TOWN BRANCH",
+            "geometry": LineString([(-84.5, 38.0), (-84.49, 38.01)]),
+        }],
+        crs="EPSG:4326",
+    ).to_file(source, driver="GeoJSON")
+
+    result = io.load_bike_facilities(params_mod.load(), source)
+
+    assert result.loc[0, "id_src"] == 649
+    assert result.loc[0, "fac"] == "path"
+    assert not result.loc[0, "on_road"]
+    assert result.loc[0, "status"] == "Existing"
+    assert result.loc[0, "network_name"] == "TOWN BRANCH"

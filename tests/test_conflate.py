@@ -350,6 +350,38 @@ def test_identical_connectors_are_emitted_once():
     assert len(_dedupe_connectors(rows)) == 1
 
 
+@pytest.mark.parametrize("near_part_first", [True, False])
+@pytest.mark.parametrize("target_coords, expected", [
+    ([(0.5, -0.2), (0.5, 10)], (0.5, -0.2)),
+    ([(0.5, -10), (0.5, 0.2)], (0.5, 0.2)),
+])
+def test_path_junction_snaps_to_nearest_multipart_component_endpoint(
+    near_part_first, target_coords, expected,
+):
+    """A multipart trail's component order must not affect its junction."""
+    path = LineString([(0, 0), (-20, 0)])
+    parts = [target_coords, [(100, 100), (120, 100)]]
+    if not near_part_first:
+        parts.reverse()
+    off = gpd.GeoDataFrame(
+        geometry=[path, MultiLineString(parts)],
+        crs=32616,
+    )
+
+    found = _find_path_junctions(
+        path,
+        0,
+        off,
+        STRtree(off.geometry.values),
+        endpoint_max_m=8,
+        interior_max_m=0.75,
+    )
+
+    assert len(found) == 1
+    assert found[0][2] == -2
+    assert tuple(found[0][1].coords[0]) == expected
+
+
 def test_street_attachment_near_endpoint_snaps_to_endpoint():
     path = LineString([(0, 0), (0, 10)])
     target = LineString([(0.5, 0.2), (10, 0.2)])

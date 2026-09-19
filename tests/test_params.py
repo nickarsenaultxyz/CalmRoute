@@ -24,6 +24,7 @@ def test_facility_mapping_covers_every_source_value():
     mapping = p["facility.type_map"]
     expected = {
         "Shared Use Path",
+        "Park Trail",
         "Buffered Bicycle Lane",
         "Bicycle Lane",
         "Shoulder",

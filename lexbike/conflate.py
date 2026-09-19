@@ -715,6 +715,11 @@ def _find_path_junctions(
             if other.distance(pt) > max_m:
                 continue
             seen.add(k)
+            # Multipart trails have no single coordinate sequence. Snap on the
+            # nearest component so its endpoints remain real junction nodes,
+            # regardless of where that component appears in the source record.
+            if other.geom_type == "MultiLineString":
+                other = min(other.geoms, key=lambda line: line.distance(pt))
             target_along = other.project(pt)
             if target_along <= interior_max_m:
                 snapped = Point(other.coords[0])
